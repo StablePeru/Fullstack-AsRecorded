@@ -1,0 +1,66 @@
+# Entornos Virtuales de Python
+venv/
+.venv/
+env/
+ENV/
+*.pyc
+__pycache__/
+.Python
+
+# Dependencias de Node.js (dentro de ASRECORDED)
+frontend/node_modules/
+
+# Archivos de build/distribución de Remix (dentro de ASRECORDED)
+frontend/public/build/
+frontend/build/
+frontend/.cache/
+frontend/.env
+
+# Archivos de entorno (MUY IMPORTANTE)
+# Si usas .env para claves API, contraseñas de BD, etc. ¡NUNCA LOS SUBAS!
+.env
+.env.*
+!.env.example # Si tienes un .env.example, sí querrás subirlo
+
+# Archivos de entorno específicos de ASRECORDED (si los tienes)
+ASRECORDED/.env
+ASRECORDED/.env.*
+!ASRECORDED/.env.example
+
+# Archivos de base de datos SQLite (si usas y no quieres versionarlos)
+*.sqlite3
+*.db
+*.db3
+
+# Archivos de sistema operativo
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos de IDE y editores
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Archivos específicos de tu proyecto que no deben subirse
+# (Por ejemplo, archivos de datos grandes o sensibles)
+BOY GIRL_S2_39.xlsx
+cookie.txt
+
+# Archivos de Docker (si tienes algunos temporales o locales que no quieres)
+# docker-compose.override.yml (a veces usado para configuraciones locales)
+
+# Cachés y archivos temporales de Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

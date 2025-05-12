@@ -1,0 +1,80 @@
+# docker-compose.yml
+# version: '3.8' # Ya no es necesaria
+
+services:
+  db:
+    image: postgres:15
+    container_name: asrecorded_db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-AsRecorded_db}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-admin}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - asrecorded_network
+
+  api:
+    build: .
+    container_name: asrecorded_api
+    depends_on:
+      - db
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    environment:
+      FLASK_APP: api_app.py
+      FLASK_DEBUG: 1
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-AsRecorded_db}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-admin}
+    networks:
+      - asrecorded_network
+
+  # --- SECCIÓN FRONTEND (AHORA CONFIGURADA) ---
+  frontend:
+    build:
+      context: ./frontend # Ruta a la carpeta donde está el Dockerfile de Remix
+      dockerfile: Dockerfile # Nombre del Dockerfile (puede omitirse si se llama 'Dockerfile')
+    container_name: asrecorded_frontend
+    command: sh -c "npm run dev -- --host"
+    ports:
+      # Mapea los puertos necesarios:
+      - "3000:3000"  # Puerto principal de la App Remix Dev Server
+      - "5173:5173"  # Puerto de Vite para HMR (Hot Module Replacement)
+      - "8002:8002"  # Puerto de Remix para LiveReload (opcional pero útil)
+    volumes:
+       # Monta el código local para desarrollo en caliente
+       # Los cambios en tu código Remix se reflejarán
+      - ./frontend:/app
+      # Evita que node_modules local sobreescriba el del contenedor (importante en Windows/macOS)
+      - /app/node_modules
+# frontend service...
+    environment:
+      # Aseguramos/Añadimos las variables necesarias para el entorno dev:
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "true"   # Para hot-reload fiable en Docker
+      HOST: 0.0.0.0               # Para asegurar que escucha correctamente
+      REMIX_DEV_ORIGIN: http://localhost:3000 # Ayuda a HMR/WebSockets
+      # Mantenemos las variables que ya tenías:
+      API_BASE_URL: http://api:5000/api # CORRECTO: Para conectar con tu backend
+      SESSION_SECRET: "tu-secreto-largo-y-aleatorio-aqui" # ¡Recuerda cambiar esto por uno real!
+
+    depends_on:
+     - api # Inicia el frontend después de que la API esté lista (aunque no garantiza que esté *respondiendo*)
+    networks:
+      - asrecorded_network
+  # --- FIN SECCIÓN FRONTEND ---
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  asrecorded_network:
+    driver: bridge

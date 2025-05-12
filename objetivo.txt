@@ -1,0 +1,105 @@
+### **Visión General del Proyecto: AsRecorded – Gestor de Guiones de Doblaje**
+
+---
+
+#### **1. Propósito del Proyecto**
+
+**AsRecorded** es una aplicación web desarrollada para centralizar, organizar y gestionar el flujo de trabajo relacionado con los guiones de doblaje de series de televisión. Su principal objetivo es sustituir procesos manuales —como hojas de cálculo o documentos dispersos— por una plataforma estructurada, única y eficiente.
+
+La herramienta busca facilitar todas las etapas del proceso, desde la recepción del material original hasta su uso práctico en sala, permitiendo un seguimiento claro del estado de cada proyecto y mejorando la coordinación entre los distintos miembros del equipo. La información se organiza jerárquicamente en la plataforma de la siguiente manera:
+
+**Series > Capítulos > Takes > Intervenciones (diálogos)**
+
+---
+
+#### **2. Funcionalidades Esenciales (Implementadas y Mejoradas)**
+
+##### **Gestión de Usuarios y Autenticación**
+*   Registro de nuevos usuarios con roles definidos (técnico, director).
+*   Inicio de sesión seguro. El sistema identifica el rol del usuario.
+    *   Interfaz de login y registro modernizada con Tailwind CSS, incluyendo manejo de errores y feedback visual.
+*   Cierre de sesión (logout) funcional.
+*   El rol del usuario determina las acciones permitidas y la visibilidad de ciertas secciones (ej. "Usuarios" para admin).
+*   Protección de rutas basada en autenticación y rol.
+*   Página de administración de usuarios (para rol 'admin') que permite listar usuarios y cambiar sus roles, con interfaz mejorada.
+
+##### **Gestión de Series y Capítulos**
+*   **Importación de Datos:**
+    *   Importación de archivos Excel estructurados para Series, Takes e Intervenciones.
+    *   Formulario de importación integrado en la página de gestión de series, con feedback visual y limpieza automática tras éxito.
+*   **Gestión de Series:**
+    *   Visualización de la lista completa de series disponibles en una interfaz mejorada con Tailwind CSS, presentando cada serie como una tarjeta expandible.
+    *   Creación manual de nuevas series a través de un formulario dedicado, con limpieza automática tras éxito y UI optimista para mostrar la nueva serie inmediatamente.
+    *   Eliminación de series (incluyendo su contenido asociado) con confirmación del usuario.
+*   **Gestión de Capítulos:**
+    *   Al expandir una serie, se cargan y muestran dinámicamente sus capítulos asociados.
+    *   Indicador de carga mejorado (spinner) al cargar capítulos.
+    *   Enlaces directos desde cada capítulo a su respectiva "Vista de Sala" (gestión de takes).
+
+##### **Navegación Jerárquica y UI General**
+*   **Layout Principal (`root.tsx`):**
+    *   Cabecera de navegación persistente con enlaces dinámicos según el estado de autenticación y rol del usuario.
+    *   Estilos globales aplicados con Tailwind CSS, incluyendo modo oscuro automático y un diseño base profesional.
+    *   Manejo de errores global mejorado (ErrorBoundary) con una página de error estilizada.
+*   **Página de Inicio (`_index.tsx`):**
+    *   Página de bienvenida atractiva y adaptativa, con contenido diferente para usuarios logueados y visitantes.
+*   **Consistencia Visual:** Aplicación de un sistema de diseño coherente a través de clases de componentes reutilizables definidas en `tailwind.css` para botones, formularios, alertas, tarjetas y secciones desplegables.
+*   Transiciones y animaciones sutiles para mejorar la experiencia de usuario (ej. despliegue de secciones, hover en elementos).
+
+##### **Vista de Sala (Gestión de Takes)**
+*   Visualización secuencial de los takes del capítulo seleccionado.
+*   Navegación entre takes (anterior, siguiente, selección directa desde un dropdown).
+    *   Interfaz de navegación y controles mejorada con Tailwind CSS, optimizando la disposición de los elementos.
+*   Visualización de las intervenciones (personaje y diálogo) del take actual.
+*   **Edición de Diálogos:**
+    *   Posibilidad de editar los diálogos directamente en la vista de takes (principalmente para el rol de director).
+    *   Los cambios en los diálogos se guardan en la base de datos mediante una acción específica y se reflejan con UI optimista.
+*   **Gestión de Estado de Intervenciones:**
+    *   El técnico puede marcar cada intervención como realizada/pendiente mediante un checkbox.
+    *   Se registra automáticamente el usuario que ha marcado dicha intervención como finalizada (funcionalidad del backend).
+    *   Feedback visual inmediato (UI optimista y cambio de color de fondo) al marcar/desmarcar intervenciones.
+*   **Funcionalidad Avanzada de Búsqueda por Personaje:**
+    1.  **Autocompletado:** Al escribir en el campo de búsqueda, se sugieren personajes existentes en el capítulo.
+    2.  **Salto Inteligente:** Al iniciar una búsqueda, la vista salta automáticamente al primer take donde el personaje buscado tiene intervenciones pendientes. Si no hay pendientes, salta a la primera aparición.
+    3.  **Resaltado Visual:** Las intervenciones del personaje buscado que están pendientes se resaltan en color naranja. Las completadas se mantienen en verde (el verde tiene prioridad).
+    4.  **Navegación Específica:** Los botones "take anterior" y "siguiente take" navegan directamente al siguiente/anterior take donde el personaje buscado tenga líneas pendientes.
+    5.  Manejo de errores y mensajes informativos para la búsqueda (ej. "No más intervenciones pendientes...").
+
+---
+
+#### **3. Flujo de Trabajo Básico (se mantiene, pero con experiencia de usuario mejorada)**
+
+1.  Un usuario se registra o inicia sesión a través de una interfaz clara y moderna.
+2.  Importa un archivo Excel o añade una serie manualmente desde la página "Gestión de Series", recibiendo feedback visual inmediato.
+3.  Desde la lista de series, el usuario selecciona una serie para visualizar sus capítulos de forma dinámica.
+4.  Selecciona un capítulo específico para acceder a la "Vista de Sala".
+5.  En la "Vista de Sala":
+    *   El director revisa y edita los diálogos directamente.
+    *   El técnico marca las intervenciones como realizadas, con cambios reflejados instantáneamente.
+6.  Utiliza la funcionalidad de búsqueda por personaje (con autocompletado y navegación inteligente) para encontrar rápidamente intervenciones pendientes y agilizar el trabajo.
+7.  Navega fácilmente entre secciones o vuelve al listado de series.
+8.  (Pendiente) El proyecto puede ser exportado en formato Excel (.xlsx).
+
+---
+
+#### **4. Tecnologías Principales (se mantiene)**
+
+*   **Base de Datos:** PostgreSQL.
+*   **Backend (API):** Python con Flask.
+*   **Frontend:** JavaScript/TypeScript con Remix (React).
+    *   **Estilos:** Tailwind CSS, con un sistema de clases de componentes reutilizables para una UI profesional y consistente, incluyendo modo oscuro.
+*   **Contenerización:** Docker y Docker Compose.
+
+---
+
+#### **5. Próximos Pasos / Mejoras Potenciales (Algunas ideas basadas en nuestra conversación)**
+*   Implementar la funcionalidad de exportación a Excel.
+*   Mejorar el indicador de "Cargando capítulos" con animaciones de esqueleto (skeleton loaders).
+*   Añadir "Toasts" o notificaciones flotantes para feedback de acciones.
+*   UI Optimista para la eliminación de series.
+*   Búsqueda/Filtrado en la lista de series.
+*   Paginación o carga infinita para la lista de series si crece mucho.
+*   Funcionalidad para editar la información de una serie existente.
+*   Modal de confirmación de eliminación personalizado y estilizado.
+*   Permitir arrastrar y soltar (Drag and Drop) para la importación de archivos Excel.
+*   Refinar la lógica `disabled` de los botones de navegación en la Vista de Sala cuando una búsqueda de personaje está activa.
