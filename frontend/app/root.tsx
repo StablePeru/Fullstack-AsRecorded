@@ -64,52 +64,42 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const user = data?.user;
 
   const [isMounted, setIsMounted] = useState(false);
-  // Initialize theme to 'light' (or your server's default) to match SSR
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   // Effect to run once on client mount to determine actual client theme
   useEffect(() => {
-    setIsMounted(true); // Component is now mounted
-
-    // Determine client's theme preference
-    let clientInitialTheme: 'light' | 'dark' = 'light'; // Fallback
+    setIsMounted(true);
+    let clientInitialTheme: 'light' | 'dark' = 'light';
     const storedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
     if (storedTheme) {
       clientInitialTheme = storedTheme;
     } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
       clientInitialTheme = 'dark';
     }
-    
-    // Update React state if different from SSR default
-    // This will trigger a re-render with the correct client theme
     if (clientInitialTheme !== theme) {
       setTheme(clientInitialTheme);
     }
-    // Note: The inline script already handled initial class on <html>.
-    // This useEffect ensures React's state is in sync for subsequent logic.
   }, []); // Empty array means run once on mount
 
   // Effect to handle theme changes (e.g., from toggleTheme)
   useEffect(() => {
-    // Only run if mounted to avoid issues during SSR or initial client render mismatch
-    if (!isMounted) {
+    if (!isMounted) { // Asegura que esto solo corre en el cliente después del montaje
       return;
     }
-
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
     localStorage.setItem('theme', theme);
-  }, [theme, isMounted]); // Re-run when theme or isMounted changes
+  }, [theme, isMounted]); // Se ejecuta cuando theme o isMounted cambia
 
   const toggleTheme = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
   };
 
   return (
-    <html lang="es" className="h-full">
+     <html lang="es" className={theme === 'dark' ? "h-full dark" : "h-full"} suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -122,15 +112,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
               (function() {
                 try {
                   var theme = localStorage.getItem('theme');
-                  // Default to 'light' if no preference set
                   var initialTheme = 'light'; 
                   if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                     initialTheme = 'dark';
                   }
+                  // Solo modificar clases relacionadas con el tema
                   if (initialTheme === 'dark') {
                     document.documentElement.classList.add('dark');
                   } else {
-                    // Explicitly remove 'dark' if 'light' or no preference
+                    // Asegurarse de remover 'dark' si no es el tema, sin afectar otras clases como 'h-full'
                     document.documentElement.classList.remove('dark');
                   }
                 } catch (e) {}
@@ -238,7 +228,7 @@ export function ErrorBoundary() {
   }
 
   return (
-    <html lang="es" className="h-full">
+    <html lang="es" className="h-full" suppressHydrationWarning>
       <head>
         <title>{title} - AsRecorded</title>
         <Meta />

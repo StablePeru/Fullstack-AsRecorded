@@ -25,6 +25,7 @@ import {
   useState,
   useRef,
   useMemo,
+  useId,
 } from "react";
 import anime from 'animejs/lib/anime.es.js';
 
@@ -323,7 +324,9 @@ function SuccessAlert({ message }: { message: string }) { return ( <div classNam
 // --- StyledDetails Component (usando la versión con animación grid anterior) ---
 function StyledDetails({ summary, children, initiallyOpen = false }: { summary: string, children: React.ReactNode, initiallyOpen?: boolean }) {
     const [isOpen, setIsOpen] = useState(initiallyOpen);
-    const contentId = useMemo(() => `details-content-${Math.random().toString(36).substring(2, 9)}`, []);
+    // const contentId = useMemo(() => `details-content-${Math.random().toString(36).substring(2, 9)}`, []); // <-- LÍNEA ANTERIOR
+    const reactGeneratedId = useId(); // <--- 2. USA useId para obtener un ID base estable
+    const contentId = `details-content-${reactGeneratedId}`; // <--- 3. Construye tu ID completo
 
     return (
         <div className="bg-white dark:bg-gray-800/50 shadow-md rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -333,7 +336,7 @@ function StyledDetails({ summary, children, initiallyOpen = false }: { summary: 
                 onClick={() => setIsOpen(!isOpen)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsOpen(!isOpen); }}
                 aria-expanded={isOpen}
-                aria-controls={contentId}
+                aria-controls={contentId} // <-- Ahora coincidirá entre servidor y cliente
                 className="px-5 py-3 text-lg font-medium text-gray-700 dark:text-gray-200 cursor-pointer list-none flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-t-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900 transition-colors duration-150"
             >
                 {summary}
@@ -345,7 +348,7 @@ function StyledDetails({ summary, children, initiallyOpen = false }: { summary: 
                 </svg>
             </div>
             <div
-                id={contentId}
+                id={contentId} // <-- Ahora coincidirá entre servidor y cliente
                 className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
             >
                 <div className="overflow-hidden">
@@ -357,6 +360,7 @@ function StyledDetails({ summary, children, initiallyOpen = false }: { summary: 
         </div>
     );
 }
+
 
 // --- ImportExcelForm (Sin cambios internos, usa StyledDetails modificado) ---
 function ImportExcelForm({ feedback, disabled, }: { feedback: ActionData | undefined; disabled: boolean; }) {
