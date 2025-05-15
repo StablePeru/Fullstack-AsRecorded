@@ -433,6 +433,33 @@ def get_all_users_endpoint():
         logging.exception(f"Error en GET /api/users (search: {search_term}, sort: {sort_by} {sort_order})")
         return jsonify({"error": "Error interno al listar usuarios."}), 500
 
+@app.route('/api/intervenciones/<int:interv_id>/timecode', methods=['PATCH'])
+@roles_required(['tecnico', 'director', 'admin'])
+def update_timecode_endpoint(interv_id):
+    available, error_response, status_code = check_services()
+    if not available:
+        return error_response, status_code
+
+    data = request.get_json(silent=True) or {}
+    tc_in  = data.get('tc_in')
+    tc_out = data.get('tc_out')
+
+    if tc_in is None and tc_out is None:
+        return jsonify({"error": "Se requiere 'tc_in' o 'tc_out'"}), 400
+
+    # (opcional) valida formato aquí con la misma regex del frontend
+
+    ok = handler_instance.update_intervention_timecode(interv_id,
+                                                       tc_in=tc_in,
+                                                       tc_out=tc_out) \
+         if handler_instance else \
+         db_handler.update_intervention_timecode(interv_id,
+                                                 tc_in=tc_in,
+                                                 tc_out=tc_out)
+    if ok:
+        return jsonify({"tc_in": tc_in, "tc_out": tc_out}), 200
+    return jsonify({"error": f"Intervención {interv_id} no encontrada"}), 404
+
 @app.route('/api/users/<int:user_id>/role', methods=['PUT']) # PUT para idempotencia
 @roles_required(['admin'])
 def update_user_role_endpoint(user_id):
