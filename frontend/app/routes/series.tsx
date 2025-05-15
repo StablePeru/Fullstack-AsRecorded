@@ -491,64 +491,116 @@ function SeriesList({ series, expandedSerieId, toggleSerieExpansion, onDeleteCon
         </ul>
     );
 }
-function SerieChapters({ serieId }: { serieId: number }) { /* ... sin cambios ... */
-    const fetcher = useFetcher<Capitulo[] | { error: string }>();
+function SerieChapters({ serieId }: { serieId: number }) {
+  const fetcher = useFetcher<Capitulo[] | { error: string }>();
+  const [showSpinner, setShowSpinner] = useState(false);
 
-    useEffect(() => {
-        if (fetcher.state === "idle" && !fetcher.data) {
-        fetcher.load(`/api/chapters/${serieId}`);
-        }
-    }, [fetcher, serieId]);
-
-    if (fetcher.state === "loading") {
-        return (
-        <div className="flex items-center justify-center p-4">
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600 dark:text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span className="text-sm text-gray-500 dark:text-gray-400">Cargando capítulos…</span>
-        </div>
-        );
+  useEffect(() => {
+    // Iniciar la carga solo si estamos en idle y no hay datos previos (ej. al cambiar de serie)
+    if (fetcher.state === "idle" && fetcher.data === undefined) {
+      fetcher.load(`/api/chapters/${serieId}`);
     }
+  }, [serieId, fetcher.state, fetcher.data, fetcher.load]); // Dependencias más explícitas
 
-    const error = fetcher.data && typeof fetcher.data === 'object' && 'error' in fetcher.data
-                    ? (fetcher.data as { error: string }).error
-                    : undefined;
+  useEffect(() => {
+    let timerId: number | undefined;
+    if (fetcher.state === 'loading') {
+      timerId = window.setTimeout(() => {
+        setShowSpinner(true);
+      }, 750); // Ajusta este valor (750ms = 0.75 segundos)
+    } else {
+      setShowSpinner(false); // Ocultar el spinner si ya no está cargando
+    }
+    return () => {
+      if (timerId) {
+        clearTimeout(timerId);
+      }
+    };
+  }, [fetcher.state]);
 
-    if (error) return <ErrorAlert message={`Error al cargar capítulos: ${error}`} />;
+  // Caso 1: Cargando y el spinner demorado debe mostrarse
+  if (fetcher.state === "loading" && showSpinner) {
+    return (
+      <div className="flex items-center justify-center p-4">
+        <svg
+          className="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600 dark:text-indigo-400"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span className="text-sm text-gray-500 dark:text-gray-400">
+          Cargando capítulos…
+        </span>
+      </div>
+    );
+  }
+
+  // Caso 2: Carga finalizada (ya no está 'loading' ni 'idle' sin datos)
+  if (fetcher.state !== "loading" && fetcher.data !== undefined) {
+    const error =
+      typeof fetcher.data === "object" && // fetcher.data ya no es undefined aquí
+      fetcher.data !== null && // Asegurar que no es null
+      "error" in fetcher.data &&
+      typeof (fetcher.data as { error?: string }).error === "string"
+        ? (fetcher.data as { error: string }).error
+        : undefined;
+
+    if (error) {
+      return <ErrorAlert message={`Error al cargar capítulos: ${error}`} />;
+    }
 
     const capitulos = Array.isArray(fetcher.data) ? fetcher.data : [];
 
-    if (!capitulos.length && fetcher.state !== 'loading') {
-        return <p className="text-sm text-gray-500 dark:text-gray-400 italic">Esta serie no tiene capítulos registrados.</p>;
+    if (capitulos.length === 0) {
+      return (
+        <p className="text-sm text-gray-500 dark:text-gray-400 italic p-4 text-center">
+          Esta serie no tiene capítulos registrados.
+        </p>
+      );
     }
 
     return (
-        <div className="flow-root">
-            <ul role="list" className="-mb-2">
-            {capitulos.map((c, index) => (
-                <li key={c.id} className={`py-2 ${index !== capitulos.length -1 ? 'border-b border-gray-200 dark:border-gray-700/50' : ''}`}>
-                <div className="relative group">
-                    <Link
-                    to={`/takes/${c.id}`}
-                    className="block p-2 -m-2 rounded-md text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors group"
-                    title={`Abrir takes para Cap. ${c.numero_capitulo}`}
-                    >
-                    <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium">Cap. {c.numero_capitulo}{c.titulo_capitulo ? `: ${c.titulo_capitulo}` : ""}</span>
-                        <svg className="w-5 h-5 text-indigo-400 dark:text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" /></svg>
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">ID Cap: {c.id}</p>
-                    </Link>
-                </div>
-                </li>
-            ))}
-            </ul>
-        </div>
+      <div className="flow-root">
+        <ul role="list" className="-mb-2">
+          {capitulos.map((c, index) => (
+            <li
+              key={c.id}
+              className={`py-2 ${
+                index !== capitulos.length - 1
+                  ? "border-b border-gray-200 dark:border-gray-700/50"
+                  : ""
+              }`}
+            >
+              <div className="relative group">
+                <Link
+                  to={`/takes/${c.id}`}
+                  className="block p-2 -m-2 rounded-md text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors group"
+                  title={`Abrir takes para Cap. ${c.numero_capitulo}`}
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">
+                      Cap. {c.numero_capitulo}
+                      {c.titulo_capitulo ? `: ${c.titulo_capitulo}` : ""}
+                    </span>
+                    <svg className="w-5 h-5 text-indigo-400 dark:text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" /></svg>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    ID Cap: {c.id}
+                  </p>
+                </Link>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
     );
+  }
+
+  // Caso 3: Estado inicial (fetcher.state === 'idle' y fetcher.data === undefined)
+  // O cargando silenciosamente (fetcher.state === 'loading' y !showSpinner)
+  // En ambos casos, mostramos el placeholder.
+  return <div className="p-4"> </div>; // Placeholder para mantener el espacio
 }
-
-
-// Asegúrate que estas clases base existen en tu tailwind.css
-// .input-text, .form-label, .btn-primary, .btn-success, .btn-danger-sm, .input-file
