@@ -7,17 +7,52 @@
 html,
 body {
   @apply bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100;
-
-  /* Apply dark theme based on system preference if no specific class is set */
-  /* This is more of a fallback; script in head and React state are primary drivers */
   @media (prefers-color-scheme: dark) {
     color-scheme: dark;
   }
 }
 
-/* Explicitly set dark mode when .dark class is present on html */
 html.dark {
   color-scheme: dark;
+}
+
+/* === Animaciones Personalizadas === */
+@layer utilities {
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-fadeInUp {
+    animation: fadeInUp 0.3s ease-out forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .animate-fadeIn {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+
+  @keyframes scaleUpAndFadeIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  .animate-scaleUpAndFadeIn {
+    animation: scaleUpAndFadeIn 0.2s ease-out forwards;
+  }
 }
 
 
@@ -63,7 +98,9 @@ html.dark {
            text-sm font-medium rounded-md shadow-sm
            focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900
            transition-all duration-150 ease-in-out
-           disabled:opacity-60 disabled:cursor-not-allowed;
+           disabled:opacity-60 disabled:cursor-not-allowed
+           active:scale-95 /* Efecto de "presionar" */
+           active:shadow-inner; /* Sombra interior al presionar */
   }
   .btn-md {
     @apply px-4 py-2;
@@ -106,13 +143,15 @@ html.dark {
            text-gray-900 dark:text-gray-100
            placeholder-gray-400 dark:placeholder-gray-500
            focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm
-           transition-colors duration-150 ease-in-out disabled:opacity-60 disabled:bg-gray-100 dark:disabled:bg-gray-800;
+           transition-all duration-150 ease-in-out /* Añadido transition-all */
+           disabled:opacity-60 disabled:bg-gray-100 dark:disabled:bg-gray-800;
   }
   .input-select {
     @apply block w-full pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 rounded-md shadow-sm
            bg-white dark:bg-gray-700/80 text-gray-900 dark:text-gray-100
            focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm
-           transition-colors duration-150 ease-in-out disabled:opacity-60 disabled:bg-gray-100 dark:disabled:bg-gray-800;
+           transition-all duration-150 ease-in-out /* Añadido transition-all */
+           disabled:opacity-60 disabled:bg-gray-100 dark:disabled:bg-gray-800;
   }
   .input-file {
     @apply block w-full text-sm text-gray-900 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer
@@ -125,7 +164,9 @@ html.dark {
      @apply h-5 w-5 text-indigo-600 border-gray-300 dark:border-gray-600 rounded
             focus:ring-indigo-500 dark:focus:ring-offset-gray-800
             dark:bg-gray-700 dark:checked:bg-indigo-500
-            disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer;
+            disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer
+            transition-all duration-100 ease-in-out /* Añadido para transformaciones */
+            checked:scale-110; /* Pequeño escalado al marcar */
   }
 
   /* === Tarjetas y Secciones Desplegables (Details) === */
@@ -151,4 +192,23 @@ html.dark {
   .spinner-color-primary { @apply text-indigo-600 dark:text-indigo-400; }
   .spinner-circle-base { @apply opacity-25; }
   .spinner-path-base { @apply opacity-75; }
+}
+
+/* === Animaciones === */
+
+@keyframes radialExpandGreen {
+  from {
+    /* Empieza más pequeño si quieres que el origen sea más puntual */
+    transform: scale(0.1); 
+    opacity: 0.6; /* Un poco más opaco al inicio */
+  }
+  to {
+    /* Escala suficientemente grande para cubrir la intervención */
+    transform: scale(15); /* Aumenta este valor si la intervención es grande */
+    opacity: 0;
+  }
+}
+.animate-radialExpandGreen {
+  /* Ajusta la duración y el timing function a tu gusto */
+  animation: radialExpandGreen 0.6s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; 
 }

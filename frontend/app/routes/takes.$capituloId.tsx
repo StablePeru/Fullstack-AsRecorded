@@ -166,7 +166,6 @@ async function handleUpdateTimecodeAction(request: Request, form: FormData): Pro
   const tcInValue = form.get("tc_in") as string | null;
   if (isNaN(id) || id <= 0) return json<UpdateTimecodeActionData>({ type: "update_timecode", ok: false, error: "ID de intervención inválido" }, { status: 400 });
   
-  // Basic frontend format validation (backend should do robust validation)
   const tcRegex = /^\d{2}:\d{2}:\d{2}:\d{2}$/;
   if (tcInValue && !tcRegex.test(tcInValue)) {
       return json<UpdateTimecodeActionData>({ type: "update_timecode", ok: false, interventionId: id, error: "Formato de Timecode inválido. Debe ser HH:MM:SS:FF." }, { status: 400 });
@@ -194,7 +193,7 @@ export async function action({ request }: ActionFunctionArgs): Promise<Response>
       return handleUpdateTimecodeAction(request, form);
     default:
       return json<ActionData>(
-        { type: "update_status", ok: false, error: "Acción desconocida" } as UpdateStatusActionData, // Cast for default
+        { type: "update_status", ok: false, error: "Acción desconocida" } as UpdateStatusActionData, 
         { status: 400 }
       );
   }
@@ -205,7 +204,7 @@ interface TimecodeInputProps {
   initialValue: string | null;
   onSubmit: (value: string) => void;
   onCancel: () => void;
-  framesPerSecond?: number; // default 25
+  framesPerSecond?: number; 
 }
 
 export const TimecodeInput: React.FC<TimecodeInputProps> = ({
@@ -214,18 +213,12 @@ export const TimecodeInput: React.FC<TimecodeInputProps> = ({
   onCancel,
   framesPerSecond = 25,
 }) => {
-  /* ---------- estado + refs ---------- */
-
-  // Estado para que React pinte el valor
   const [digits, setDigits] = useState(() =>
     (initialValue ? initialValue.replace(/:/g, "") : "00000000").slice(-8)
   );
-  // Ref que SIEMPRE contiene el valor más reciente (sin esperar a React)
   const digitsRef = useRef<string>(digits);
-  const cursorRef = useRef<number>(7); // empieza en FF unidades
+  const cursorRef = useRef<number>(7); 
   const inputRef = useRef<HTMLInputElement>(null);
-
-  /* ---------- helpers ---------- */
 
   const fmt = (d: string) =>
     `${d.slice(0, 2)}:${d.slice(2, 4)}:${d.slice(4, 6)}:${d.slice(6, 8)}`;
@@ -240,22 +233,18 @@ export const TimecodeInput: React.FC<TimecodeInputProps> = ({
 
   const resetCursor = () => (cursorRef.current = 7);
 
-  /** Actualiza ref y estado en un solo sitio */
   const commitDigits = (next: string) => {
     digitsRef.current = next;
     setDigits(next);
   };
 
-  /** Escribe nuevo dígito sin desplazar los demás */
   const writeDigit = (d: string) => {
     const arr = digitsRef.current.split("");
-    // Desplaza SOLO lo que se ha tecleado ya en esta sesión
     for (let i = cursorRef.current + 1; i <= 7; i++) arr[i - 1] = arr[i];
     arr[7] = d;
     commitDigits(arr.join(""));
   };
 
-  /** Deshace (Backspace) solo lo escrito en esta sesión */
   const undoDigit = () => {
     const arr = digitsRef.current.split("");
     for (let i = 7; i > cursorRef.current; i--) arr[i] = arr[i - 1];
@@ -269,15 +258,11 @@ export const TimecodeInput: React.FC<TimecodeInputProps> = ({
     onSubmit(isValid(value) ? fmt(value) : "");
   };
 
-  /* ---------- efectos ---------- */
-
   useEffect(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
     resetCursor();
   }, []);
-
-  /* ---------- manejador ---------- */
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (/^\d$/.test(e.key)) {
@@ -302,8 +287,6 @@ export const TimecodeInput: React.FC<TimecodeInputProps> = ({
     }
   };
 
-  /* ---------- render ---------- */
-
   return (
     <input
       ref={inputRef}
@@ -324,10 +307,10 @@ export const TimecodeInput: React.FC<TimecodeInputProps> = ({
 interface IntervencionEditableProps {
   intervencion: Intervencion;
   isSearchedAndPending: boolean;
-  isUpdatingStatus: boolean;
-  isUpdatingDialog: boolean;
-  isUpdatingTimecode: boolean;
-  displayCompleto: boolean;
+  isUpdatingStatus: boolean; // Prop para saber si *esta* intervención está siendo actualizada por fetcherStatus
+  isUpdatingDialog: boolean; // Prop para saber si *esta* intervención está siendo actualizada por fetcherDialog
+  isUpdatingTimecode: boolean; // Prop para saber si *esta* intervención está siendo actualizada por fetcherTimecode
+  displayCompleto: boolean; // Estado visual actual (puede ser optimista)
   fetcherStatus: ReturnType<typeof useFetcher<UpdateStatusActionData>>;
   fetcherDialog: ReturnType<typeof useFetcher<UpdateDialogActionData>>;
   fetcherTimecode: ReturnType<typeof useFetcher<UpdateTimecodeActionData>>;
@@ -339,7 +322,7 @@ function IntervencionEditable({
   isUpdatingStatus,
   isUpdatingDialog,
   isUpdatingTimecode,
-  displayCompleto,
+  displayCompleto, // Este es el estado que ya considera el optimismo del fetcherStatus
   fetcherStatus,
   fetcherDialog,
   fetcherTimecode,
@@ -347,12 +330,27 @@ function IntervencionEditable({
   const [isEditingDialog, setIsEditingDialog] = useState(false);
   const [editableDialog, setEditableDialog] = useState(intervencion.dialogo);
   const [isEditingTCIn, setIsEditingTCIn] = useState(false);
+  
+  // Estado para controlar la animación de "onda" al completar
+  const [isCompleting, setIsCompleting] = useState(false);
 
   useEffect(() => {
+    // Actualiza el diálogo editable si la prop de intervención cambia (ej. por submit de otro usuario)
+    // y no estamos actualmente editando.
     if (!isEditingDialog) {
       setEditableDialog(intervencion.dialogo);
     }
   }, [intervencion.dialogo, isEditingDialog]);
+
+  // Resetea el estado de la animación de "onda" después de que termine
+  useEffect(() => {
+    if (isCompleting) {
+      const timer = setTimeout(() => {
+        setIsCompleting(false);
+      }, 600); // Debe coincidir con la duración de la animación `radialExpandGreen`
+      return () => clearTimeout(timer);
+    }
+  }, [isCompleting]);
 
   const handleDialogSubmit = (
     e: React.FormEvent<HTMLFormElement> | React.FocusEvent<HTMLTextAreaElement>
@@ -360,7 +358,7 @@ function IntervencionEditable({
     e.preventDefault();
     if (editableDialog.trim() === intervencion.dialogo.trim() && e.type !== "submit") {
       setIsEditingDialog(false);
-      setEditableDialog(intervencion.dialogo);
+      setEditableDialog(intervencion.dialogo); // Restaura si no hay cambios
       return;
     }
     const formData = new FormData();
@@ -372,61 +370,100 @@ function IntervencionEditable({
   };
 
   const handleTCInSubmit = (newTcInValue: string) => {
-    if (newTcInValue === (intervencion.tc_in || "00:00:00:00")) {
+    // No enviar si el valor no cambió (considerando null/undefined como "00:00:00:00")
+    const currentTc = intervencion.tc_in || "00:00:00:00";
+    const newTc = newTcInValue || "00:00:00:00";
+    if (newTc === currentTc && newTcInValue !== "") { // Si es string vacío, sí se envía para borrar
+       setIsEditingTCIn(false);
+       return;
+    }
+    if (newTcInValue === "" && !intervencion.tc_in) { // Si ya era null y se envía vacío, no hacer nada
       setIsEditingTCIn(false);
       return;
     }
+
     const formData = new FormData();
     formData.set("_action", "update_timecode");
     formData.set("interventionId", String(intervencion.id));
-    formData.set("tc_in", newTcInValue);
+    formData.set("tc_in", newTcInValue); // Enviar string vacío si es el caso
     fetcherTimecode.submit(formData, { method: "post" });
     setIsEditingTCIn(false);
   };
+  
+  // `displayCompleto` ya incluye el estado optimista del fetcherStatus para `completo`
+  // No necesitamos `optimisticallyCompleto` aquí porque `displayCompleto` lo maneja desde TakesPage.
+  const showAsComplete = displayCompleto; 
 
-  const isGenerallyUpdating = isUpdatingStatus || isUpdatingDialog || isUpdatingTimecode;
+  let baseBgColorClass = "bg-white dark:bg-gray-800/80 border-gray-200 dark:border-gray-700";
+  let activeBgColorClass = "";
 
-  let bgColorClass = "bg-white dark:bg-gray-800/80 border-gray-200 dark:border-gray-700";
-  if (displayCompleto) {
-    bgColorClass = "bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-700";
+  if (showAsComplete) {
+    activeBgColorClass = "bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-700";
   } else if (isSearchedAndPending) {
-    bgColorClass = "bg-orange-50 dark:bg-orange-900/30 border-orange-300 dark:border-orange-600";
+    activeBgColorClass = "bg-orange-50 dark:bg-orange-900/30 border-orange-300 dark:border-orange-600";
   }
+  
+  const finalBgColorClass = activeBgColorClass || baseBgColorClass;
 
   const optimisticDialogToShow =
-    fetcherDialog.state !== "idle" &&
+    fetcherDialog.state !== "idle" && // Si el fetcherDialog está activo para esta intervención
     fetcherDialog.formData?.get("interventionId") === String(intervencion.id) &&
     fetcherDialog.formData?.get("_action") === "update_dialog"
       ? (fetcherDialog.formData.get("dialogo") as string)
-      : intervencion.dialogo;
+      : intervencion.dialogo; // Sino, el valor actual de la intervención
 
   const optimisticTCInToShow =
-    fetcherTimecode.state !== "idle" &&
+    fetcherTimecode.state !== "idle" && // Si el fetcherTimecode está activo para esta intervención
     fetcherTimecode.formData?.get("interventionId") === String(intervencion.id) &&
-    fetcherTimecode.formData?.get("_action") === "update_timecode" &&
-    fetcherTimecode.formData?.get("tc_in")
-      ? (fetcherTimecode.formData.get("tc_in") as string)
+    fetcherTimecode.formData?.get("_action") === "update_timecode"
+      ? (fetcherTimecode.formData.get("tc_in") as string | null) // Puede ser null si se borra
       : intervencion.tc_in;
 
   const timecodeDisplay = optimisticTCInToShow || "00:00:00:00";
 
+  // Determina si hay alguna actualización en curso específica para esta intervención
+  const isCurrentlyUpdatingForThisItem = isUpdatingStatus || isUpdatingDialog || isUpdatingTimecode;
+
   return (
     <div
       key={intervencion.id}
-      className={`flex items-start sm:items-center gap-3 sm:gap-4 p-3 border rounded-md transition-all duration-150 
-                  ${isGenerallyUpdating ? "opacity-60 animate-pulse" : "opacity-100"} 
-                  ${bgColorClass}`}
+      className={`relative overflow-hidden flex items-start sm:items-center gap-3 sm:gap-4 p-3 border rounded-md 
+                  transform hover:-translate-y-px 
+                  ${(isCurrentlyUpdatingForThisItem && !isCompleting) ? "opacity-60 animate-pulse" : "opacity-100"} 
+                  ${finalBgColorClass}
+                  transition-all duration-200 ease-in-out 
+                  hover:shadow-lg hover:border-indigo-400 dark:hover:border-indigo-500
+                  motion-safe:transition-colors motion-safe:duration-500 motion-safe:ease-out 
+                  `}
     >
-      <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2 w-32 sm:w-40 md:w-48 flex-shrink-0 text-right sm:text-left pt-0.5 sm:pt-0">
+      {/* Elemento para la animación de "onda" verde */}
+      {/* Se muestra si `isCompleting` es true Y la intención es marcar como completo (`showAsComplete` será true) */}
+      {isCompleting && showAsComplete && (
+        <div
+          className="absolute bg-green-400/50 dark:bg-green-500/40 rounded-full animate-radialExpandGreen z-0 pointer-events-none"
+          style={{
+            width: '30px',    
+            height: '30px',
+            top: 'calc(50% - 15px)', 
+            right: '10px', // AJUSTA ESTO A LA POSICIÓN DE TU CHECKBOX
+                           // Y EL `scale` EN LA ANIMACIÓN CSS PARA QUE CUBRA TODO
+          }}
+        />
+      )}
+
+      {/* Contenido de la intervención (personaje, TC) */}
+      <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:gap-2 w-32 sm:w-40 md:w-48 flex-shrink-0 text-right sm:text-left pt-0.5 sm:pt-0">
         {isEditingTCIn ? (
-          <TimecodeInput
-            initialValue={intervencion.tc_in} // Pasar el valor original para la edición inicial
-            onSubmit={handleTCInSubmit}
-            onCancel={() => setIsEditingTCIn(false)}
-          />
+          <div className="animate-scaleUpAndFadeIn">
+            <TimecodeInput
+              initialValue={intervencion.tc_in} // Siempre el valor original para edición
+              onSubmit={handleTCInSubmit}
+              onCancel={() => setIsEditingTCIn(false)}
+            />
+          </div>
         ) : (
           <span
-            className="text-xs sm:text-sm font-mono text-gray-500 dark:text-gray-400 whitespace-nowrap order-2 sm:order-1 cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/50 px-1 rounded"
+            className="text-xs sm:text-sm font-mono text-gray-500 dark:text-gray-400 whitespace-nowrap order-2 sm:order-1 cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/50 px-1 rounded transition-colors"
             onClick={() => setIsEditingTCIn(true)}
             title="Haz clic para editar el Timecode de entrada"
           >
@@ -438,78 +475,91 @@ function IntervencionEditable({
         </strong>
       </div>
 
-      {isEditingDialog ? (
-        <fetcherDialog.Form onSubmit={handleDialogSubmit} className="flex-grow">
-          <textarea
-            name="dialogo"
-            value={editableDialog}
-            onChange={(e) => setEditableDialog(e.target.value)}
-            onBlur={handleDialogSubmit}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleDialogSubmit(e as any);
-              } else if (e.key === "Escape") {
-                setIsEditingDialog(false);
-                setEditableDialog(intervencion.dialogo);
-              }
-            }}
-            autoFocus
-            rows={Math.max(2, editableDialog.split("\n").length)}
-            className="w-full p-1 text-sm sm:text-base text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-700/90 border border-indigo-500 rounded shadow-inner resize-y focus:ring-1 focus:ring-indigo-500"
-          />
-        </fetcherDialog.Form>
-      ) : (
-        <span
-          className="flex-grow text-sm sm:text-base text-gray-800 dark:text-gray-100 leading-relaxed break-words cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/50 p-1 rounded min-h-[2.25rem] flex items-center"
-          onClick={() => setIsEditingDialog(true)}
-          title="Haz clic para editar el diálogo"
-        >
-          {optimisticDialogToShow || (
-            <span className="italic text-gray-400">(Vacío)</span>
-          )}
-        </span>
-      )}
-
-      <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+      {/* Contenido de la intervención (diálogo) */}
+      <div className="relative z-10 flex-grow">
+        {isEditingDialog ? (
+          <fetcherDialog.Form onSubmit={handleDialogSubmit} className="flex-grow animate-scaleUpAndFadeIn">
+            <textarea
+              name="dialogo"
+              value={editableDialog}
+              onChange={(e) => setEditableDialog(e.target.value)}
+              onBlur={handleDialogSubmit} // Guardar al perder foco
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleDialogSubmit(e as any); }
+                else if (e.key === "Escape") { setIsEditingDialog(false); setEditableDialog(intervencion.dialogo); }
+              }}
+              autoFocus
+              rows={Math.max(2, editableDialog.split("\n").length)}
+              className="w-full p-1 text-sm sm:text-base text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-700/90 border border-indigo-500 rounded shadow-inner resize-y focus:ring-1 focus:ring-indigo-500 transition-all duration-150"
+            />
+          </fetcherDialog.Form>
+        ) : (
+          <span
+            className="flex-grow text-sm sm:text-base text-gray-800 dark:text-gray-100 leading-relaxed break-words cursor-pointer hover:bg-gray-100/50 dark:hover:bg-gray-700/50 p-1 rounded min-h-[2.25rem] flex items-center transition-colors"
+            onClick={() => setIsEditingDialog(true)}
+            title="Haz clic para editar el diálogo"
+          >
+            {optimisticDialogToShow || (<span className="italic text-gray-400">(Vacío)</span>)}
+          </span>
+        )}
+      </div>
+      
+      {/* Controles (iconos de error, checkbox) */}
+      <div className="relative z-10 flex items-center gap-2 ml-auto flex-shrink-0">
         {fetcherStatus.data?.error &&
-          fetcherStatus.data?.interventionId === intervencion.id &&
+          fetcherStatus.data.interventionId === intervencion.id && // Solo mostrar error para esta intervención
           fetcherStatus.data.type === "update_status" && (
             <span title={fetcherStatus.data.error} className="text-red-500 cursor-help">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>
             </span>
           )}
         {fetcherDialog.data?.error &&
-          fetcherDialog.data?.interventionId === intervencion.id &&
+          fetcherDialog.data.interventionId === intervencion.id &&
           fetcherDialog.data.type === "update_dialog" && (
             <span title={fetcherDialog.data.error} className="text-red-500 cursor-help">
              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>
             </span>
           )}
         {fetcherTimecode.data?.error &&
-          fetcherTimecode.data?.interventionId === intervencion.id &&
+          fetcherTimecode.data.interventionId === intervencion.id &&
           fetcherTimecode.data.type === "update_timecode" && (
             <span title={fetcherTimecode.data.error} className="text-red-500 cursor-help">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>
             </span>
           )}
-        <fetcherStatus.Form method="post" className="m-0">
+        <fetcherStatus.Form 
+            method="post" 
+            className="m-0" // Asegura que el form no añada márgenes
+            onSubmit={(e) => {
+                const currentForm = e.currentTarget;
+                const formData = new FormData(currentForm);
+                const newCompletoState = formData.get("newState") === "true";
+
+                // Iniciar animación de "onda" solo si se está marcando como completo
+                if (newCompletoState && !isCurrentlyUpdatingForThisItem) { 
+                    setIsCompleting(true);
+                }
+                // No es necesario llamar a e.preventDefault() ni a fetcherStatus.submit() aquí si el botón es type="submit"
+            }}
+        >
           <input type="hidden" name="_action" value="update_status" />
           <input type="hidden" name="interventionId" value={String(intervencion.id)} />
-          <input type="hidden" name="newState" value={String(!intervencion.completo)} />
-          <input
-            type="checkbox"
-            checked={displayCompleto}
-            onChange={() => {}}
-            onClick={(e) => {
-              if (e.currentTarget.form) {
-                fetcherStatus.submit(e.currentTarget.form);
-              }
-            }}
-            aria-label={`Marcar intervención de ${intervencion.personaje} como ${displayCompleto ? "incompleta" : "completa"}`}
-            disabled={isGenerallyUpdating}
-            className="input-checkbox"
-          />
+          <input type="hidden" name="newState" value={String(!intervencion.completo)} /> {/* El valor real de la intervención */}
+          <button
+            type="submit"
+            // Deshabilitar si hay alguna actualización en curso para ESTE item,
+            // o si la animación de completar está activa (para evitar doble submit rápido)
+            disabled={isCurrentlyUpdatingForThisItem || isCompleting}
+            className="appearance-none focus:outline-none p-1 rounded-md focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-800" 
+            aria-label={`Marcar intervención de ${intervencion.personaje} como ${showAsComplete ? "incompleta" : "completa"}`}
+          >
+            <input
+              type="checkbox"
+              checked={showAsComplete} // El estado visual del checkbox se basa en `showAsComplete`
+              readOnly // El input en sí es solo visual, el control lo lleva el botón
+              className="input-checkbox pointer-events-none" // Tailwind class para el estilo del checkbox
+            />
+          </button>
         </fetcherStatus.Form>
       </div>
     </div>
@@ -528,96 +578,113 @@ export default function TakesPage() {
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
   const [isPerformingSearchJump, setIsPerformingSearchJump] = useState(false);
 
+  // Aplicar actualizaciones optimistas a los 'takes'
   const takes = useMemo(() => {
     if (!initialTakes) return [];
     return initialTakes.map((take) => ({
       ...take,
       intervenciones: take.intervenciones.map((interv) => {
         let updatedInterv = { ...interv };
+
+        // Optimismo para estado 'completo'
         if (
           fetcherStatus.formData &&
           fetcherStatus.formData.get("interventionId") === String(interv.id) &&
           fetcherStatus.formData.get("_action") === "update_status"
         ) {
-          updatedInterv.completo =
-            fetcherStatus.formData.get("newState") === "true";
+          updatedInterv.completo = fetcherStatus.formData.get("newState") === "true";
+        } else if (
+          fetcherStatus.data?.ok && 
+          fetcherStatus.data.interventionId === interv.id &&
+          fetcherStatus.data.type === "update_status" &&
+          typeof fetcherStatus.data.newState === 'boolean' // Asegurarse que newState está presente
+        ) {
+           // Aplicar el estado confirmado por el servidor si el fetcher ya terminó
+           // Esto es útil si el fetcher actualiza el estado antes de que el loader recargue
+           updatedInterv.completo = fetcherStatus.data.newState;
         }
+
+
+        // Optimismo para diálogo
         if (
           fetcherDialog.formData &&
           fetcherDialog.formData.get("interventionId") === String(interv.id) &&
           fetcherDialog.formData.get("_action") === "update_dialog"
         ) {
-          updatedInterv.dialogo = fetcherDialog.formData.get(
-            "dialogo"
-          ) as string;
+          updatedInterv.dialogo = fetcherDialog.formData.get("dialogo") as string;
+        } else if (
+          fetcherDialog.data?.ok &&
+          fetcherDialog.data.interventionId === interv.id &&
+          fetcherDialog.data.type === "update_dialog" &&
+          typeof fetcherDialog.data.newDialog === 'string'
+        ) {
+          updatedInterv.dialogo = fetcherDialog.data.newDialog;
         }
+
+        // Optimismo para timecode
         if (
           fetcherTimecode.formData &&
           fetcherTimecode.formData.get("interventionId") === String(interv.id) &&
           fetcherTimecode.formData.get("_action") === "update_timecode"
         ) {
           const newTcIn = fetcherTimecode.formData.get("tc_in") as string | null;
-          if (newTcIn !== null) {
-            updatedInterv.tc_in = newTcIn;
-          }
+          // Aquí no es necesario `updatedInterv.tc_in = newTcIn` porque el componente IntervencionEditable
+          // ya muestra el valor del formData directamente para tc_in (optimisticTCInToShow).
+          // Si quisiéramos que el `takes` en sí mismo se actualice, sí lo haríamos.
+          // Por ahora, dejaremos que IntervencionEditable maneje la visualización optimista del TC.
+          // Sin embargo, para consistencia, podríamos añadirlo:
+           if (newTcIn !== undefined) { // Si es null, es un valor válido (borrar TC)
+             updatedInterv.tc_in = newTcIn;
+           }
+        } else if (
+            fetcherTimecode.data?.ok &&
+            fetcherTimecode.data.interventionId === interv.id &&
+            fetcherTimecode.data.type === "update_timecode" &&
+            (fetcherTimecode.data.tc_in !== undefined ) // Puede ser null
+        ) {
+            updatedInterv.tc_in = fetcherTimecode.data.tc_in;
         }
+
+
         return updatedInterv;
       }),
     }));
   }, [
     initialTakes,
-    fetcherStatus.formData,
-    fetcherDialog.formData,
-    fetcherTimecode.formData,
+    fetcherStatus.formData, fetcherStatus.data,
+    fetcherDialog.formData, fetcherDialog.data,
+    fetcherTimecode.formData, fetcherTimecode.data,
   ]);
 
   const currentTake = useMemo(() => {
-    if (
-      !takes ||
-      takes.length === 0 ||
-      currentTakeIndex < 0 ||
-      currentTakeIndex >= takes.length
-    )
-      return null;
+    if (!takes || takes.length === 0 || currentTakeIndex < 0 || currentTakeIndex >= takes.length) return null;
     return takes[currentTakeIndex];
   }, [takes, currentTakeIndex]);
 
   const filteredInterventions = useMemo(() => {
     if (!currentTake) return [];
+    // Aquí no se aplica filtro por searchTerm, se muestran todas las del take actual.
+    // El resaltado por searchTerm se hace en IntervencionEditable.
     return currentTake.intervenciones;
   }, [currentTake]);
 
   const findTakeWithPendingIntervention = useCallback(
-    (
-      characterName: string,
-      startIndex: number,
-      direction: "forward" | "backward"
-    ): number => {
+    (characterName: string, startIndex: number, direction: "forward" | "backward"): number => {
       if (!takes || takes.length === 0 || !characterName) return -1;
-      const charLower = characterName.toLowerCase();
+      const charLower = characterName.toLowerCase().trim();
       if (direction === "forward") {
         for (let i = startIndex; i < takes.length; i++) {
-          if (i < 0) continue;
+          if (i < 0) continue; // Asegura que el índice no sea negativo
           const take = takes[i];
-          if (
-            take.intervenciones.some(
-              (int) =>
-                int.personaje.toLowerCase().includes(charLower) && !int.completo
-            )
-          ) {
+          if (take.intervenciones.some(int => int.personaje.toLowerCase().includes(charLower) && !int.completo)) {
             return i;
           }
         }
-      } else {
+      } else { // backward
         for (let i = startIndex; i >= 0; i--) {
-          if (i >= takes.length) continue;
+          if (i >= takes.length) continue; // Asegura que el índice no se pase
           const take = takes[i];
-          if (
-            take.intervenciones.some(
-              (int) =>
-                int.personaje.toLowerCase().includes(charLower) && !int.completo
-            )
-          ) {
+          if (take.intervenciones.some(int => int.personaje.toLowerCase().includes(charLower) && !int.completo)) {
             return i;
           }
         }
@@ -629,94 +696,71 @@ export default function TakesPage() {
 
   useEffect(() => {
     if (searchTerm.trim() !== "" && isPerformingSearchJump) {
-      setSearchMessage(null);
-      const firstTakeIndex = findTakeWithPendingIntervention(
-        searchTerm,
-        0,
-        "forward"
-      );
+      setSearchMessage(null); // Limpia mensaje anterior
+      const firstTakeIndex = findTakeWithPendingIntervention(searchTerm, 0, "forward");
       if (firstTakeIndex !== -1) {
         setCurrentTakeIndex(firstTakeIndex);
       } else {
-        const anyTakeIndex = takes.findIndex((take) =>
-          take.intervenciones.some((int) =>
-            int.personaje
-              .toLowerCase()
-              .includes(searchTerm.trim().toLowerCase())
-          )
+        // Si no hay pendientes, buscar la primera aparición (completa o no)
+        const anyTakeIndex = takes.findIndex(take =>
+          take.intervenciones.some(int => int.personaje.toLowerCase().includes(searchTerm.trim().toLowerCase()))
         );
         if (anyTakeIndex !== -1) {
           setCurrentTakeIndex(anyTakeIndex);
-          setSearchMessage(
-            `No hay intervenciones pendientes para ${searchTerm}. Mostrando primera aparición.`
-          );
+          setSearchMessage(`No hay intervenciones pendientes para ${searchTerm}. Mostrando primera aparición.`);
         } else {
-          setSearchMessage(
-            `${searchTerm} no tiene intervenciones en este capítulo.`
-          );
+          setSearchMessage(`${searchTerm} no tiene intervenciones en este capítulo.`);
         }
       }
-      setIsPerformingSearchJump(false);
+      setIsPerformingSearchJump(false); // Resetea el flag de salto
     } else if (searchTerm.trim() === "") {
-      setSearchMessage(null);
+      setSearchMessage(null); // Limpia el mensaje si el término de búsqueda se borra
     }
   }, [searchTerm, takes, findTakeWithPendingIntervention, isPerformingSearchJump]);
+
 
   const handleSearchTermChange = (newSearchTerm: string) => {
     const oldSearchTerm = searchTerm;
     setSearchTerm(newSearchTerm);
-    if (
-      newSearchTerm.trim() !== "" &&
-      newSearchTerm.trim().toLowerCase() !== oldSearchTerm.trim().toLowerCase()
-    ) {
+    if (newSearchTerm.trim() !== "" && newSearchTerm.trim().toLowerCase() !== oldSearchTerm.trim().toLowerCase()) {
       setIsPerformingSearchJump(true);
     } else if (newSearchTerm.trim() === "" && oldSearchTerm.trim() !== "") {
-      setIsPerformingSearchJump(false);
+      // Si se borra el término de búsqueda, no es necesario un "salto", 
+      // simplemente se dejará de resaltar.
+      setIsPerformingSearchJump(false); 
     }
   };
 
   const goToNextTake = () => {
     if (searchTerm.trim() !== "") {
-      const nextSearchIndex = Math.min(takes.length - 1, currentTakeIndex + 1);
-      const nextFoundIndex = findTakeWithPendingIntervention(
-        searchTerm,
-        nextSearchIndex,
-        "forward"
-      );
+      const searchStartIndex = Math.min(takes.length - 1, currentTakeIndex + 1);
+      const nextFoundIndex = findTakeWithPendingIntervention(searchTerm, searchStartIndex, "forward");
       if (nextFoundIndex !== -1) {
         setCurrentTakeIndex(nextFoundIndex);
         setSearchMessage(null);
       } else {
-        setSearchMessage(
-          `No más intervenciones pendientes para ${searchTerm} después de este take.`
-        );
+        setSearchMessage(`No más intervenciones pendientes para ${searchTerm} después de este take.`);
       }
     } else {
-      setCurrentTakeIndex((i) => Math.min(i + 1, takes.length - 1));
+      setCurrentTakeIndex((prevIndex) => Math.min(prevIndex + 1, takes.length - 1));
     }
   };
 
   const goToPrevTake = () => {
     if (searchTerm.trim() !== "") {
-      const prevSearchIndex = Math.max(0, currentTakeIndex - 1);
-      const prevFoundIndex = findTakeWithPendingIntervention(
-        searchTerm,
-        prevSearchIndex,
-        "backward"
-      );
+      const searchStartIndex = Math.max(0, currentTakeIndex - 1);
+      const prevFoundIndex = findTakeWithPendingIntervention(searchTerm, searchStartIndex, "backward");
       if (prevFoundIndex !== -1) {
         setCurrentTakeIndex(prevFoundIndex);
         setSearchMessage(null);
       } else {
-        setSearchMessage(
-          `No más intervenciones pendientes para ${searchTerm} antes de este take.`
-        );
+        setSearchMessage(`No más intervenciones pendientes para ${searchTerm} antes de este take.`);
       }
     } else {
-      setCurrentTakeIndex((i) => Math.max(i - 1, 0));
+      setCurrentTakeIndex((prevIndex) => Math.max(prevIndex - 1, 0));
     }
   };
-
+  
   const handleTakeSelect = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedIndex = parseInt(event.target.value, 10);
     if (!isNaN(selectedIndex)) {
@@ -725,6 +769,7 @@ export default function TakesPage() {
     }
   };
 
+
   if (loaderError) {
     return (
       <div className="alert alert-error m-4" role="alert">
@@ -732,7 +777,7 @@ export default function TakesPage() {
         <p>{loaderError}</p>
         {capitulo?.serie_id && (
           <Link
-            to={`/series/${capitulo.serie_id}`} // Corrected path
+            to={`/series/${capitulo.serie_id}`} 
             className="mt-4 btn btn-primary btn-sm"
           >
             Volver a la serie
@@ -749,7 +794,7 @@ export default function TakesPage() {
         </p>
         {capitulo?.serie_id && (
           <Link
-            to={`/series/${capitulo.serie_id}`} // Corrected path
+            to={`/series/${capitulo.serie_id}`} 
             className="mt-4 btn btn-primary"
           >
             Volver a la serie
@@ -759,27 +804,22 @@ export default function TakesPage() {
     );
   }
   if (!currentTake) {
+    // Esto podría pasar brevemente si los takes se cargan pero currentTakeIndex es inválido.
+    // O si el useMemo de currentTake aún no se ha ejecutado con los takes cargados.
     return (
       <div className="p-6 text-center text-gray-500 dark:text-gray-400">
-        Cargando take...
+        Cargando take actual...
       </div>
     );
   }
 
   const noNextTakeForSearch =
     searchTerm.trim() !== "" &&
-    findTakeWithPendingIntervention(
-      searchTerm,
-      currentTakeIndex + 1,
-      "forward"
-    ) === -1;
+    findTakeWithPendingIntervention(searchTerm, currentTakeIndex + 1, "forward") === -1;
   const noPrevTakeForSearch =
     searchTerm.trim() !== "" &&
-    findTakeWithPendingIntervention(
-      searchTerm,
-      currentTakeIndex - 1,
-      "backward"
-    ) === -1;
+    findTakeWithPendingIntervention(searchTerm, currentTakeIndex - 1, "backward") === -1;
+
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -791,7 +831,7 @@ export default function TakesPage() {
               {capitulo.titulo_capitulo ? `: ${capitulo.titulo_capitulo}` : ""}
             </h1>
             <Link
-              to="/series"
+              to="/series" // Asumiendo que esta es la ruta correcta para la lista de series
               className="text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:underline"
             >
               Volver a la Lista de Series
@@ -856,8 +896,7 @@ export default function TakesPage() {
           <button
             onClick={goToNextTake}
             disabled={
-              (searchTerm.trim() === "" &&
-                currentTakeIndex === takes.length - 1) ||
+              (searchTerm.trim() === "" && currentTakeIndex === takes.length - 1) ||
               (searchTerm.trim() !== "" && noNextTakeForSearch)
             }
             className="btn btn-primary"
@@ -866,13 +905,20 @@ export default function TakesPage() {
           </button>
         </div>
         {searchMessage && (
-          <p className="mt-2 text-sm text-center text-blue-600 dark:text-blue-400">
+          <p 
+            key={searchMessage} 
+            className="mt-2 text-sm text-center text-blue-600 dark:text-blue-400 animate-fadeIn"
+          >
             {searchMessage}
           </p>
         )}
       </header>
 
-      <section aria-labelledby={`take-heading-${currentTake.id}`}>
+      <section 
+        key={currentTake.id} 
+        aria-labelledby={`take-heading-${currentTake.id}`}
+        className="animate-fadeInUp" 
+      >
         <div
           id={`take-heading-${currentTake.id}`}
           className="mb-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-md text-gray-800 dark:text-gray-100 shadow"
@@ -889,40 +935,40 @@ export default function TakesPage() {
         {filteredInterventions.length > 0 ? (
           <div className="space-y-3">
             {filteredInterventions.map((interv) => {
-              const isUpdatingStatus =
+              // Determinar si esta intervención específica está siendo actualizada por cada fetcher
+              const isUpdatingThisStatus =
                 fetcherStatus.state !== "idle" &&
-                fetcherStatus.formData?.get("interventionId") ===
-                  String(interv.id) &&
+                fetcherStatus.formData?.get("interventionId") === String(interv.id) &&
                 fetcherStatus.formData?.get("_action") === "update_status";
-              const isUpdatingDialog =
+              
+              const isUpdatingThisDialog =
                 fetcherDialog.state !== "idle" &&
-                fetcherDialog.formData?.get("interventionId") ===
-                  String(interv.id) &&
+                fetcherDialog.formData?.get("interventionId") === String(interv.id) &&
                 fetcherDialog.formData?.get("_action") === "update_dialog";
-              const isUpdatingTimecode =
+
+              const isUpdatingThisTimecode =
                 fetcherTimecode.state !== "idle" &&
-                fetcherTimecode.formData?.get("interventionId") ===
-                  String(interv.id) &&
+                fetcherTimecode.formData?.get("interventionId") === String(interv.id) &&
                 fetcherTimecode.formData?.get("_action") === "update_timecode";
-              const displayCompleto = isUpdatingStatus
-                ? fetcherStatus.formData?.get("newState") === "true"
-                : interv.completo;
+
+              // Determinar el estado 'completo' visual para esta intervención (considerando optimismo)
+              // `interv.completo` aquí viene del `useMemo(takes, ...)` que ya maneja el optimismo.
+              const displayIntervCompleto = interv.completo;
+                
               const isSearched =
                 searchTerm.trim() !== "" &&
-                interv.personaje
-                  .toLowerCase()
-                  .includes(searchTerm.trim().toLowerCase());
-              const isSearchedAndPending = isSearched && !displayCompleto;
+                interv.personaje.toLowerCase().includes(searchTerm.trim().toLowerCase());
+              const isSearchedAndPending = isSearched && !displayIntervCompleto;
 
               return (
                 <IntervencionEditable
                   key={interv.id}
-                  intervencion={interv}
+                  intervencion={interv} // Pasar la intervención del array 'takes' (que ya es optimista)
                   isSearchedAndPending={isSearchedAndPending}
-                  isUpdatingStatus={isUpdatingStatus}
-                  isUpdatingDialog={isUpdatingDialog}
-                  isUpdatingTimecode={isUpdatingTimecode}
-                  displayCompleto={displayCompleto}
+                  isUpdatingStatus={isUpdatingThisStatus}
+                  isUpdatingDialog={isUpdatingThisDialog}
+                  isUpdatingTimecode={isUpdatingThisTimecode}
+                  displayCompleto={displayIntervCompleto} // Pasar el estado optimista de 'completo'
                   fetcherStatus={fetcherStatus}
                   fetcherDialog={fetcherDialog}
                   fetcherTimecode={fetcherTimecode}
