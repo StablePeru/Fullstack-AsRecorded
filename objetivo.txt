@@ -16,117 +16,154 @@ La herramienta busca facilitar todas las etapas del proceso, desde la recepción
 
 ##### **Gestión de Usuarios y Autenticación**
 
-* Registro de nuevos usuarios con roles definidos (técnico, director).
-* Inicio de sesión seguro. El sistema identifica el rol del usuario.
-
-  * Interfaz de login y registro modernizada con Tailwind CSS, incluyendo manejo de errores y feedback visual.
-* Cierre de sesión (logout) funcional.
-* El rol del usuario determina las acciones permitidas y la visibilidad de ciertas secciones (ej. "Usuarios" para admin).
-* Protección de rutas basada en autenticación y rol.
-* Página de administración de usuarios (para rol 'admin') que permite listar usuarios y cambiar sus roles, con interfaz mejorada.
+*   Registro de nuevos usuarios con roles definidos (técnico, director; el rol 'admin' se gestiona internamente).
+    *   Formulario de registro que permite seleccionar rol (técnico/director).
+*   Inicio de sesión seguro. El sistema identifica el rol del usuario.
+    *   La sesión de Remix (`auth.server.ts`) ahora obtiene el `rol` del usuario haciendo una llamada a `/api/users/me` del backend Flask después de un login exitoso, asegurando que el rol esté actualizado.
+    *   Interfaz de login y registro modernizada con Tailwind CSS, incluyendo manejo de errores y feedback visual.
+*   Cierre de sesión (logout) funcional, que también invalida la sesión en el backend Flask.
+*   El rol del usuario (obtenido de la sesión y refrescado desde `/api/users/me` en `root.tsx`) determina las acciones permitidas y la visibilidad de ciertas secciones (ej. enlaces "Usuarios" e "Import/Export" para admin).
+*   Protección de rutas basada en autenticación y rol, tanto en el frontend (loaders de Remix) como en el backend (decoradores `@login_required`, `@roles_required`).
+*   **Página de Administración de Usuarios (`/admin/user`):**
+    *   Accesible solo por usuarios con rol 'admin'.
+    *   Lista todos los usuarios con información relevante (ID, Nombre, Rol, Fechas).
+    *   Permite buscar usuarios por nombre.
+    *   Permite ordenar la lista de usuarios por ID, Nombre o Rol.
+    *   Permite cambiar el rol de un usuario (entre admin, director, tecnico) directamente desde la interfaz.
+    *   UI mejorada con Tailwind CSS, incluyendo feedback visual durante las acciones.
 
 ##### **Gestión de Series y Capítulos**
 
-* **Importación de Datos:**
-
-  * Importación de archivos Excel estructurados para Series, Takes e Intervenciones.
-  * Formulario de importación integrado en la página de gestión de series, con feedback visual y limpieza automática tras éxito.
-* **Gestión de Series:**
-
-  * Visualización de la lista completa de series disponibles en una interfaz mejorada con Tailwind CSS, presentando cada serie como una tarjeta expandible.
-  * Creación manual de nuevas series a través de un formulario dedicado, con limpieza automática tras éxito y UI optimista para mostrar la nueva serie inmediatamente.
-  * Eliminación de series (incluyendo su contenido asociado) con confirmación del usuario.
-* **Gestión de Capítulos:**
-
-  * Al expandir una serie, se cargan y muestran dinámicamente sus capítulos asociados.
-  * Indicador de carga mejorado (spinner) al cargar capítulos.
-  * Enlaces directos desde cada capítulo a su respectiva "Vista de Sala" (gestión de takes).
+*   **Importación de Datos:**
+    *   Importación de archivos Excel (`.xlsx`) estructurados para Series, Takes e Intervenciones.
+    *   Formulario de importación integrado en la página de gestión de series, presentado como una sección desplegable (`StyledDetails`), con feedback visual y limpieza automática tras éxito.
+*   **Gestión de Series (`/series`):**
+    *   Visualización de la lista completa de series disponibles en una interfaz mejorada con Tailwind CSS, presentando cada serie como una tarjeta expandible (`SeriesList`, `SerieChapters`).
+    *   **Buscador animado:** Un campo de búsqueda que se expande con animación al hacer clic en el icono o al recibir foco, permitiendo filtrar series por nombre o referencia. Se colapsa si está vacío y pierde el foco. Se puede cerrar con la tecla `Escape`.
+    *   Creación manual de nuevas series a través de un formulario dedicado (sección desplegable `StyledDetails`), con limpieza automática tras éxito y UI optimista para mostrar la nueva serie inmediatamente.
+    *   Eliminación de series (incluyendo su contenido asociado en cascada en la BD) con confirmación del usuario.
+*   **Gestión de Capítulos:**
+    *   Al expandir una serie, se cargan y muestran dinámicamente sus capítulos asociados (usando `useFetcher` para llamar a `/api/chapters/$serieId`).
+    *   Indicador de carga mejorado (spinner con retraso para evitar parpadeos) al cargar capítulos.
+    *   Enlaces directos desde cada capítulo a su respectiva "Vista de Sala" (gestión de takes).
 
 ##### **Navegación Jerárquica y UI General**
 
-* **Layout Principal (`root.tsx`):**
+*   **Layout Principal (`root.tsx`):**
+    *   Cabecera de navegación persistente con enlaces dinámicos según el estado de autenticación y rol del usuario (obtenido y refrescado de forma robusta).
+    *   **Modo Oscuro/Claro:** Implementado con un interruptor en la cabecera, persistencia en `localStorage` y detección de preferencia del sistema. El cambio es instantáneo y afecta a toda la aplicación.
+    *   Estilos globales aplicados con Tailwind CSS, incluyendo modo oscuro y un diseño base profesional.
+    *   Manejo de errores global mejorado (`ErrorBoundary`) con una página de error estilizada y útil.
+*   **Página de Inicio (`_index.tsx`):**
+    *   Página de bienvenida atractiva y adaptativa, con contenido diferente para usuarios logueados y visitantes.
+*   **Consistencia Visual:** Aplicación de un sistema de diseño coherente a través de clases de componentes reutilizables definidas en `tailwind.css` para botones, formularios, alertas, tarjetas, badges, spinners y secciones desplegables.
+    *   El componente `StyledDetails` usa `useId` para IDs estables, mejorando la compatibilidad con SSR y evitando errores de hidratación.
+*   Transiciones y animaciones sutiles para mejorar la experiencia de usuario (ej. despliegue de secciones, hover en elementos, aparición de elementos con `fadeInUp`, `scaleUpAndFadeIn`).
 
-  * Cabecera de navegación persistente con enlaces dinámicos según el estado de autenticación y rol del usuario.
-  * Estilos globales aplicados con Tailwind CSS, incluyendo modo oscuro automático y un diseño base profesional.
-  * Manejo de errores global mejorado (ErrorBoundary) con una página de error estilizada.
-* **Página de Inicio (`_index.tsx`):**
+##### **Vista de Sala (Gestión de Takes - `/takes/$capituloId`)**
 
-  * Página de bienvenida atractiva y adaptativa, con contenido diferente para usuarios logueados y visitantes.
-* **Consistencia Visual:** Aplicación de un sistema de diseño coherente a través de clases de componentes reutilizables definidas en `tailwind.css` para botones, formularios, alertas, tarjetas y secciones desplegables.
-* Transiciones y animaciones sutiles para mejorar la experiencia de usuario (ej. despliegue de secciones, hover en elementos).
+*   Visualización secuencial de los takes del capítulo seleccionado.
+*   Navegación entre takes (anterior, siguiente, selección directa desde un dropdown).
+    *   Interfaz de navegación y controles mejorada con Tailwind CSS, optimizando la disposición de los elementos.
+*   Visualización de las intervenciones (personaje y diálogo) del take actual.
+*   **Edición de Diálogos:**
+    *   Posibilidad de editar los diálogos directamente en la vista de takes (principalmente para el rol de director y admin).
+    *   Los cambios en los diálogos se guardan en la base de datos mediante una acción específica (`_action: "update_dialog"`) que llama a `PATCH /api/intervenciones/:id/dialogo`. Se actualiza con UI optimista.
+    *   Guardado al perder foco o presionar Enter (sin Shift). Escape cancela la edición.
+*   **Gestión de Estado de Intervenciones:**
+    *   Usuarios autorizados (técnico, director, admin) pueden marcar cada intervención como realizada/pendiente mediante un checkbox.
+    *   Se registra automáticamente el `user_id` que ha marcado dicha intervención como finalizada y la fecha (`completado_en`) en la BD.
+    *   Feedback visual inmediato:
+        *   UI optimista al marcar/desmarcar.
+        *   Cambio de color de fondo de la intervención.
+        *   Animación "radialExpandGreen" al marcar como completo.
+        *   Indicador de carga (opacidad y `animate-pulse`) durante la actualización.
+*   **Edición Avanzada de Timecodes (TC) en `tc_in` (usando `TimecodeInput`):**
+    1.  **Entrada inteligente:** El primer dígito numérico presionado sobrescribe las unidades de fotogramas (FF); cada pulsación posterior de un dígito avanza el "cursor" de derecha a izquierda, empujando los dígitos existentes hacia la izquierda.
+    2.  **Validación diferida:** El formato `HH:MM:SS:FF` se valida al perder el foco o pulsar **Enter**. Se permiten valores temporalmente "imposibles" durante la entrada.
+    3.  **Guardado fiable:** El valor se envía al endpoint `PATCH /api/intervenciones/:id/timecode` (parámetro `tc_in`) que actualiza la BD.
+    4.  **Indicador de error contextual:** Si el backend rechaza el TC (ej. por formato o límites de FPS/seg/min), el frontend muestra un icono de error junto a la intervención.
+    5.  **Deshacer rápido:** La tecla `Backspace` deshace el último dígito introducido en la sesión de edición actual, moviendo los dígitos de "0" desde la izquierda.
+    6.  **Cancelación:** `Escape` cancela la edición del TC.
+*   **Funcionalidad Avanzada de Búsqueda por Personaje:**
+    1.  **Autocompletado (`datalist`):** Al escribir en el campo de búsqueda de personaje, se sugieren personajes existentes en el capítulo.
+    2.  **Salto Inteligente:** Al iniciar o cambiar una búsqueda, la vista salta automáticamente al primer take donde el personaje buscado tiene intervenciones pendientes. Si no hay pendientes, salta a la primera aparición (completa o no).
+    3.  **Resaltado Visual:** Las intervenciones del personaje buscado que están pendientes se resaltan con un fondo naranja. Las completadas se mantienen en verde (el verde tiene prioridad sobre el naranja).
+    4.  **Navegación Específica:** Los botones "take anterior" y "siguiente take" navegan directamente al siguiente/anterior take donde el personaje buscado tenga líneas pendientes. Los botones se deshabilitan si no hay más takes en esa dirección para el personaje buscado.
+    5.  Mensajes informativos para la búsqueda (ej. "No más intervenciones pendientes...", "Personaje no encontrado...").
+    6.  La selección manual de un take desde el dropdown resetea el estado de "salto por búsqueda".
+*   Manejo de errores de carga de datos del capítulo y feedback visual si no hay takes.
 
-##### **Vista de Sala (Gestión de Takes)**
+##### **Gestión de Importación/Exportación y Tareas Programadas (Admin)**
 
-* Visualización secuencial de los takes del capítulo seleccionado.
-* Navegación entre takes (anterior, siguiente, selección directa desde un dropdown).
-
-  * Interfaz de navegación y controles mejorada con Tailwind CSS, optimizando la disposición de los elementos.
-* Visualización de las intervenciones (personaje y diálogo) del take actual.
-* **Edición de Diálogos:**
-
-  * Posibilidad de editar los diálogos directamente en la vista de takes (principalmente para el rol de director).
-  * Los cambios en los diálogos se guardan en la base de datos mediante una acción específica y se reflejan con UI optimista.
-* **Gestión de Estado de Intervenciones:**
-
-  * El técnico puede marcar cada intervención como realizada/pendiente mediante un checkbox.
-  * Se registra automáticamente el usuario que ha marcado dicha intervención como finalizada (funcionalidad del backend).
-  * Feedback visual inmediato (UI optimista y cambio de color de fondo) al marcar/desmarcar intervenciones.
-* **Edición Avanzada de Timecodes (TC):**
-
-  1. **Entrada inteligente sin desplazamiento de dígitos existentes:** la primera tecla sobrescribe las unidades de fotogramas y cada pulsación posterior avanza de derecha a izquierda, modificando solo las posiciones que el usuario toca en esa sesión.
-  2. **Validación diferida:** el formato `HH:MM:SS:FF` solo se valida al perder el foco o pulsar **Enter**, permitiendo introducir temporalmente valores imposibles (p. ej. 90 segundos) hasta completar los dígitos.
-  3. **Guardado fiable:** el valor se envía al nuevo endpoint `PATCH /api/intervenciones/:id/timecode`, que actualiza `tc_in` y/o `tc_out` en PostgreSQL.
-  4. **Indicador de error contextual:** si el backend rechaza el TC por límites de FPS/seg/min, el frontend muestra una exclamación roja junto a la intervención.
-  5. **Deshacer rápido:** cada pulsación de Backspace deshace el último dígito escrito en la sesión actual.
-* **Funcionalidad Avanzada de Búsqueda por Personaje:**
-
-  1. **Autocompletado:** Al escribir en el campo de búsqueda, se sugieren personajes existentes en el capítulo.
-  2. **Salto Inteligente:** Al iniciar una búsqueda, la vista salta automáticamente al primer take donde el personaje buscado tiene intervenciones pendientes. Si no hay pendientes, salta a la primera aparición.
-  3. **Resaltado Visual:** Las intervenciones del personaje buscado que están pendientes se resaltan en color naranja. Las completadas se mantienen en verde (el verde tiene prioridad).
-  4. **Navegación Específica:** Los botones "take anterior" y "siguiente take" navegan directamente al siguiente/anterior take donde el personaje buscado tenga líneas pendientes.
-  5. Manejo de errores y mensajes informativos para la búsqueda (ej. "No más intervenciones pendientes...").
+*   **Página de Gestión de I/O (`/admin/io-management`):**
+    *   Accesible solo por usuarios con rol 'admin'.
+    *   Permite configurar rutas de importación/exportación en el servidor y la programación de estas tareas.
+    *   Opciones de programación (ej. diario, semanal, horario, manual) para importación y exportación.
+    *   Selección de series a exportar para tareas programadas ("todas" o una selección múltiple).
+    *   Las configuraciones se guardan llamando a `POST /api/admin/io/config`.
+    *   El backend Flask utiliza `APScheduler` para gestionar las tareas programadas. Al guardar la configuración, se intentan (re)programar los jobs correspondientes.
+*   **Exportación Manual Inmediata:**
+    *   Desde la página de gestión de I/O, el admin puede disparar una exportación de series seleccionadas ("todas" o específicas) a una ruta de destino (por defecto o especificada).
+    *   Llama a `POST /api/admin/export/now` en el backend.
+*   **Tareas Programadas (Backend - `api_app.py`):**
+    *   `scheduled_import_task_job`: Busca archivos `.xlsx` en la ruta de importación configurada y los procesa.
+    *   `scheduled_export_task_job`: Exporta las series configuradas a la ruta de exportación según la programación.
+    *   Estas tareas se ejecutan dentro del contexto de la aplicación Flask.
 
 ---
 
-#### **3. Flujo de Trabajo Básico (se mantiene, experiencia de usuario mejorada)**
+#### **3. Flujo de Trabajo Básico (Experiencia de usuario mejorada)**
 
-1. Un usuario se registra o inicia sesión a través de una interfaz clara y moderna.
-2. Importa un archivo Excel o añade una serie manualmente desde la página "Gestión de Series", recibiendo feedback visual inmediato.
-3. Desde la lista de series, el usuario selecciona una serie para visualizar sus capítulos de forma dinámica.
-4. Selecciona un capítulo específico para acceder a la "Vista de Sala".
-5. En la "Vista de Sala":
-
-   * El director revisa y edita los diálogos directamente.
-   * El técnico marca las intervenciones como realizadas, con cambios reflejados instantáneamente.
-   * El técnico o director ajusta los Timecodes con la nueva entrada inteligente y los guarda con **Enter** o al salir del campo.
-6. Utiliza la funcionalidad de búsqueda por personaje (con autocompletado y navegación inteligente) para encontrar rápidamente intervenciones pendientes y agilizar el trabajo.
-7. Navega fácilmente entre secciones o vuelve al listado de series.
-8. (Pendiente) El proyecto puede ser exportado en formato Excel (.xlsx).
+1.  Un usuario se registra (seleccionando rol técnico/director) o inicia sesión a través de una interfaz clara y moderna. Elige modo claro/oscuro.
+2.  Si es admin/director, importa un archivo Excel o añade una serie manualmente desde la página "Gestión de Series", recibiendo feedback visual inmediato. Usa el buscador animado para encontrar series.
+3.  Desde la lista de series, el usuario selecciona una serie para visualizar sus capítulos de forma dinámica.
+4.  Selecciona un capítulo específico para acceder a la "Vista de Sala".
+5.  En la "Vista de Sala":
+    *   El director/admin revisa y edita los diálogos directamente.
+    *   El técnico/director/admin marca las intervenciones como realizadas, con cambios reflejados instantáneamente y animación.
+    *   El técnico/director/admin ajusta los Timecodes de entrada (`tc_in`) con la nueva entrada inteligente y los guarda con **Enter** o al salir del campo.
+6.  Utiliza la funcionalidad de búsqueda por personaje (con autocompletado y navegación inteligente) para encontrar rápidamente intervenciones pendientes y agilizar el trabajo.
+7.  Navega fácilmente entre secciones o vuelve al listado de series.
+8.  Si es admin:
+    *   Gestiona usuarios (roles, búsqueda, ordenación) en `/admin/user`.
+    *   Configura y dispara tareas de importación/exportación en `/admin/io-management`.
+9.  (Pendiente) El proyecto puede ser exportado en formato Excel (`.xlsx`) de forma programada o manual. (Implementado en backend, frontend para exportación manual existe).
 
 ---
 
-#### **4. Tecnologías Principales (se mantiene)**
+#### **4. Tecnologías Principales (Se mantiene, con detalle en frontend)**
 
-* **Base de Datos:** PostgreSQL.
-* **Backend (API):** Python con Flask.
-* **Frontend:** JavaScript/TypeScript con Remix (React).
-
-  * **Estilos:** Tailwind CSS, con un sistema de clases de componentes reutilizables para una UI profesional y consistente, incluyendo modo oscuro.
-* **Contenerización:** Docker y Docker Compose.
+*   **Base de Datos:** PostgreSQL.
+*   **Backend (API):** Python con Flask.
+    *   **Extensiones Flask:** Flask-CORS, Flask-Bcrypt, Flask-APScheduler.
+*   **Frontend:** JavaScript/TypeScript con Remix (React).
+    *   **Estilos:** Tailwind CSS, con un sistema de clases de componentes reutilizables para una UI profesional y consistente, incluyendo modo oscuro.
+    *   **Gestión de Estado y UI:** Hooks de Remix (`useLoaderData`, `useActionData`, `useFetcher`), React Hooks (`useState`, `useEffect`, `useMemo`, `useRef`, `useCallback`, `useId`).
+    *   **UI Optimista:** Para varias acciones (añadir serie, marcar intervención, editar diálogo/TC).
+*   **Contenerización:** Docker y Docker Compose.
 
 ---
 
 #### **5. Próximos Pasos / Mejoras Potenciales**
 
-* Implementar la funcionalidad de exportación a Excel.
-* Mejorar el indicador de "Cargando capítulos" con animaciones de esqueleto (skeleton loaders).
-* Añadir "Toasts" o notificaciones flotantes para feedback de acciones.
-* UI Optimista para la eliminación de series.
-* Búsqueda/Filtrado en la lista de series.
-* Paginación o carga infinita para la lista de series si crece mucho.
-* Funcionalidad para editar la información de una serie existente.
-* Modal de confirmación de eliminación personalizado y estilizado.
-* Permitir arrastrar y soltar (Drag and Drop) para la importación de archivos Excel.
-* Refinar la lógica `disabled` de los botones de navegación en la Vista de Sala cuando una búsqueda de personaje está activa.
-* **Documentar el nuevo endpoint `/api/intervenciones/:id/timecode` y sus parámetros (`tc_in`, `tc_out`).**
-
+*   **Frontend para Exportación:** Si bien el backend y la página de admin para exportación manual existen, refinar la experiencia o permitir descargas directas si es factible (actualmente guarda en servidor).
+*   Mejorar el indicador de "Cargando capítulos" con animaciones de esqueleto (skeleton loaders) en lugar del spinner simple.
+*   Añadir "Toasts" o notificaciones flotantes para feedback de acciones (ej. guardado exitoso, error).
+*   UI Optimista para la eliminación de series (que la serie desaparezca visualmente mientras se procesa la eliminación).
+*   Paginación o carga infinita para la lista de series si crece mucho.
+*   Funcionalidad para editar la información de una serie existente (nombre, referencia).
+*   Modal de confirmación de eliminación personalizado y estilizado, en lugar del `window.confirm` nativo.
+*   Permitir arrastrar y soltar (Drag and Drop) para la importación de archivos Excel.
+*   **Documentación técnica:**
+    *   Detallar el endpoint `/api/intervenciones/:id/timecode` y sus parámetros (`tc_in`, `tc_out`).
+    *   Documentar los formatos de schedule aceptados por el backend para las tareas programadas.
+*   **Backend & Tareas Programadas:**
+    *   Implementar un job store persistente para APScheduler (ej. SQLAlchemyJobStore con PostgreSQL) para que los jobs sobrevivan reinicios del servidor.
+    *   Mejorar la lógica de (re)programación de tareas en APScheduler al guardar la configuración de I/O, para manejar cambios de forma más granular (ej. si solo cambia la ruta y no el schedule).
+    *   Considerar mecanismos de logging más robustos y centralizados para las tareas programadas.
+    *   Validación más exhaustiva de los datos en los archivos Excel importados.
+*   **Seguridad:**
+    *   Lógica para evitar que el último admin se quite su propio rol o sea eliminado.
+    *   Revisar y fortalecer la validación de entradas en todos los endpoints.
+*   **Testing:** Añadir pruebas unitarias y de integración tanto para el backend como para el frontend.
