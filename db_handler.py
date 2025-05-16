@@ -803,6 +803,131 @@ def update_user_role(user_id, new_role):
         return False
 
 
+def get_series_data_for_export(series_ids: list[int]):
+    """
+    Obtiene todos los datos necesarios (series, capítulos, takes, intervenciones)
+    para una lista de IDs de series, estructurados para exportación.
+    Devuelve un diccionario donde cada clave es un serie_id y el valor
+    es otro diccionario con 'serie_info', 'capitulos_data'.
+    Cada capítulo en 'capitulos_data' tendrá 'capitulo_info' y 'takes_data'.
+    Cada take en 'takes_data' tendrá 'take_info' e 'intervenciones_data'.
+    """
+    if not series_ids:
+        return {}
+
+    # Preparamos placeholders para la query SQL (%s, %s, ...)
+    placeholders = ', '.join(['%s'] * len(series_ids))
+    
+    conn = None
+    cursor = None
+    export_data = {}
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # 1. Obtener información de las Series
+        query_series = f"SELECT id, numero_referencia, nombre_serie FROM Series WHERE id IN ({placeholders});"
+        cursor.execute(query_series, tuple(series_ids))
+        series_results = cursor.fetchall()
+        for s_row in series_results:
+            export_data[s_row['id']] = {
+                "serie_info": dict(s_row), 
+                "capitulos_data": {} # Inicializar para capítulos
+            }
+
+        # 2. Obtener Capítulos para esas series
+        query_capitulos = f"""
+            SELECT id, serie_id, numero_capitulo, titulo_capitulo 
+            FROM Capitulos 
+            WHERE serie_id IN ({placeholders}) ORDER BY serie_id, numero_capitulo;
+        """
+        cursor.execute(query_capitulos, tuple(series_ids))
+        capitulos_results = cursor.fetchall()
+        
+        capitulo_ids_map = {} # para buscar takes/intervenciones por capítulo_id más eficientemente
+        for c_row in capitulos_results:
+            serie_id = c_row['serie_id']
+            if serie_id in export_data: # Asegurar que la serie existe
+                export_data[serie_id]['capitulos_data'][c_row['id']] = {
+                    "capitulo_info": dict(c_row),
+                    "takes_data": {} # Inicializar para takes
+                }
+                capitulo_ids_map[c_row['id']] = (serie_id, c_row['id'])
+
+        if not capitulo_ids_map: # Si no hay capítulos, no hay nada más que hacer
+            return export_data 
+
+        # 3. Obtener Takes para esos capítulos
+        cap_placeholders = ', '.join(['%s'] * len(capitulo_ids_map.keys()))
+        query_takes = f"""
+            SELECT id, capitulo_id, numero_take, tc_in, tc_out 
+            FROM Takes 
+            WHERE capitulo_id IN ({cap_placeholders}) ORDER BY capitulo_id, numero_take;
+        """
+        cursor.execute(query_takes, tuple(capitulo_ids_map.keys()))
+        takes_results = cursor.fetchall()
+
+        take_ids_map = {} # para buscar intervenciones por take_id
+        for t_row in takes_results:
+            capitulo_id_original = t_row['capitulo_id']
+            if capitulo_id_original in capitulo_ids_map:
+                serie_id, cap_id_in_export = capitulo_ids_map[capitulo_id_original]
+                export_data[serie_id]['capitulos_data'][cap_id_in_export]['takes_data'][t_row['id']] = {
+                    "take_info": dict(t_row),
+                    "intervenciones_data": [] # Inicializar para intervenciones
+                }
+                take_ids_map[t_row['id']] = (serie_id, cap_id_in_export, t_row['id'])
+        
+        if not take_ids_map:
+            return export_data
+
+        # 4. Obtener Intervenciones para esos takes
+        take_placeholders = ', '.join(['%s'] * len(take_ids_map.keys()))
+        query_intervenciones = f"""
+            SELECT i.id, i.take_id, p.nombre_personaje AS personaje, i.dialogo, 
+                   i.tc_in, i.tc_out, i.orden_en_take, i.completo,
+                   usr.nombre as completado_por_nombre_usuario, i.completado_en
+            FROM Intervenciones i
+            JOIN Personajes p ON i.personaje_id = p.id
+            LEFT JOIN Usuarios usr ON i.completado_por_user_id = usr.id
+            WHERE i.take_id IN ({take_placeholders}) 
+            ORDER BY i.take_id, i.orden_en_take, i.id;
+        """
+        cursor.execute(query_intervenciones, tuple(take_ids_map.keys()))
+        intervenciones_results = cursor.fetchall()
+
+        for i_row in intervenciones_results:
+            take_id_original = i_row['take_id']
+            if take_id_original in take_ids_map:
+                serie_id, cap_id_in_export, take_id_in_export = take_ids_map[take_id_original]
+                # Formatear para que coincida con la estructura de importación de Excel
+                # (ej. 'ID' para orden, 'Personaje', 'Dialogo', etc.)
+                formatted_interv = {
+                    'ID': i_row['orden_en_take'] + 1, # Asumiendo orden_en_take es 0-indexed
+                    'Personaje': i_row['personaje'],
+                    'Dialogo': i_row['dialogo'],
+                    'TC IN': i_row['tc_in'],
+                    'TC OUT': i_row['tc_out'],
+                    'Completo': i_row['completo'],
+                    'Completado Por': i_row['completado_por_nombre_usuario'],
+                    'Completado En': i_row['completado_en'].isoformat() if i_row['completado_en'] else None,
+                    # Añadir 'Numero Take' a cada intervención para la hoja 'Intervenciones'
+                    # Necesitamos buscar el numero_take del take_info asociado
+                    'Numero Take': export_data[serie_id]['capitulos_data'][cap_id_in_export]['takes_data'][take_id_in_export]['take_info']['numero_take']
+                }
+                export_data[serie_id]['capitulos_data'][cap_id_in_export]['takes_data'][take_id_in_export]['intervenciones_data'].append(formatted_interv)
+        
+        logging.info(f"Datos para exportación recuperados para {len(export_data)} series.")
+        return export_data
+
+    except (Exception, psycopg2.DatabaseError) as error:
+        logging.error(f"Error obteniendo datos de series para exportación: {error}")
+        raise Exception(f"Error DB obteniendo datos para exportación: {error}") from error
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
 # --- Bloque de Prueba (Opcional) ---
 if __name__ == '__main__':
     print("Probando la conexión a la base de datos...")

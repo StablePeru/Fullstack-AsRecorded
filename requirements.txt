@@ -1,6 +1,7 @@
 # requirements.txt
 Flask
 Flask-Cors
+Flask-APScheduler
 psycopg2-binary
 pandas
 openpyxl

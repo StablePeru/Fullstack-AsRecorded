@@ -426,6 +426,115 @@ class DataHandler:
             logging.exception(message)
             return False, message
 
+    def export_series_to_excel(self, series_ids_to_export: list[int], output_directory: str):
+        """
+        Exporta los datos de las series especificadas a archivos Excel,
+        un archivo por capítulo.
+        Cada archivo Excel contendrá hojas 'Serie', 'Takes', 'Intervenciones'.
+        """
+        if not series_ids_to_export:
+            return False, "No se especificaron series para exportar."
+        
+        if not os.path.isdir(output_directory):
+            try:
+                os.makedirs(output_directory, exist_ok=True)
+                logging.info(f"Directorio de salida creado: {output_directory}")
+            except OSError as e:
+                logging.error(f"No se pudo crear el directorio de salida '{output_directory}': {e}")
+                return False, f"Error al crear directorio de salida: {e}"
+
+        try:
+            full_data_map = db_handler.get_series_data_for_export(series_ids_to_export)
+        except Exception as e:
+            logging.error(f"Error al obtener datos para exportar desde DB: {e}")
+            return False, f"Error al obtener datos: {e}"
+
+        if not full_data_map:
+            return False, "No se encontraron datos para las series especificadas."
+
+        exported_files_count = 0
+        for serie_id, serie_data_content in full_data_map.items():
+            serie_info_dict = serie_data_content.get("serie_info", {})
+            
+            for capitulo_id, capitulo_content in serie_data_content.get("capitulos_data", {}).items():
+                capitulo_info_dict = capitulo_content.get("capitulo_info", {})
+
+                # Preparar Hoja 'Serie'
+                df_serie_data = {
+                    'Referencia': [serie_info_dict.get('numero_referencia')],
+                    'Nombre Serie': [serie_info_dict.get('nombre_serie')],
+                    'Nº CAPÍTULO': [capitulo_info_dict.get('numero_capitulo')],
+                    'Título Capítulo': [capitulo_info_dict.get('titulo_capitulo')] # Opcional
+                }
+                df_serie = pd.DataFrame(df_serie_data)
+
+                # Preparar Hoja 'Takes'
+                takes_list_for_df = []
+                all_intervenciones_for_capitulo = []
+
+                for take_id, take_content in capitulo_content.get("takes_data", {}).items():
+                    take_info_dict = take_content.get("take_info", {})
+                    takes_list_for_df.append({
+                        'Numero Take': take_info_dict.get('numero_take'),
+                        'TAKE IN': take_info_dict.get('tc_in'),
+                        'TAKE OUT': take_info_dict.get('tc_out'),
+                        # 'Capitulo ID (BD)': take_info_dict.get('capitulo_id') # Para debug
+                    })
+                    # Acumular intervenciones para la hoja 'Intervenciones'
+                    intervenciones_del_take = take_content.get("intervenciones_data", [])
+                    all_intervenciones_for_capitulo.extend(intervenciones_del_take)
+                
+                df_takes = pd.DataFrame(takes_list_for_df)
+
+                # Preparar Hoja 'Intervenciones'
+                df_intervenciones = pd.DataFrame(all_intervenciones_for_capitulo)
+                # Asegurar columnas en el orden deseado y con los nombres de importación
+                cols_interv = ['ID', 'Numero Take', 'Personaje', 'Dialogo', 'TC IN', 'TC OUT', 'Completo', 'Completado Por', 'Completado En']
+                df_intervenciones = df_intervenciones.reindex(columns=cols_interv)
+
+
+                # Crear el archivo Excel
+                # Nombre de archivo: RefSerie_CapXXX.xlsx
+                # Asegurar que los nombres de archivo son válidos
+                safe_serie_ref = "".join(c if c.isalnum() or c in (' ','.','_') else '_' for c in str(serie_info_dict.get('numero_referencia', 'SERIE')))
+                safe_cap_num = f"CAP{str(capitulo_info_dict.get('numero_capitulo', '000')).zfill(3)}"
+                excel_filename = f"{safe_serie_ref}_{safe_cap_num}.xlsx"
+                excel_filepath = os.path.join(output_directory, excel_filename)
+
+                try:
+                    with pd.ExcelWriter(excel_filepath, engine='openpyxl') as writer:
+                        df_serie.to_excel(writer, sheet_name='Serie', index=False)
+                        df_takes.to_excel(writer, sheet_name='Takes', index=False)
+                        df_intervenciones.to_excel(writer, sheet_name='Intervenciones', index=False)
+                    logging.info(f"Archivo Excel exportado: {excel_filepath}")
+                    exported_files_count +=1
+                except Exception as e_writer:
+                    logging.error(f"Error al escribir archivo Excel '{excel_filepath}': {e_writer}")
+                    # Continuar con el siguiente capítulo si falla uno
+
+        if exported_files_count > 0:
+            return True, f"{exported_files_count} archivo(s) de capítulo exportado(s) a '{output_directory}'."
+        else:
+            return False, "No se exportaron archivos. Revise los logs para más detalles."
+
+    # --- Configuraciones (Placeholder) ---
+    # Esto debería interactuar con la BD para persistir configuraciones
+    def get_io_configurations(self):
+        # Placeholder: En una app real, leería de DB
+        logging.info("Obteniendo configuraciones de I/O (placeholder).")
+        return {
+            "import_path": "/srv/imports", # Ejemplo de ruta en servidor
+            "import_schedule": "daily@02:00",
+            "export_path": "/srv/exports", # Ejemplo de ruta en servidor
+            "export_schedule": "weekly@sunday@03:00",
+            "export_series_ids": "all" # o [1, 2, 3]
+        }
+
+    def save_io_configurations(self, config_data):
+        # Placeholder: En una app real, guardaría en DB y (re)programaría tareas
+        logging.info(f"Guardando configuraciones de I/O (placeholder): {config_data}")
+        # Aquí iría la lógica para actualizar APScheduler si los horarios cambian
+        return True, "Configuraciones guardadas (simulado)."
 
 # --- Bloque de Prueba (Opcional) ---
 if __name__ == '__main__':
