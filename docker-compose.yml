@@ -1,6 +1,3 @@
-# docker-compose.yml
-# version: '3.8' # Ya no es necesaria
-
 services:
   db:
     image: postgres:15
@@ -25,6 +22,10 @@ services:
       - "5000:5000"
     volumes:
       - .:/app
+      # --- NUEVOS VOLÚMENES PARA IMPORTACIÓN/EXPORTACIÓN ---
+      - W:\zMant\IO_ASRECORDED\IN:/app/io_external/imports   # Host : Contenedor
+      - W:\zMant\IO_ASRECORDED\OUT:/app/io_external/exports  # Host : Contenedor
+      # --- FIN NUEVOS VOLÚMENES ---
     environment:
       FLASK_APP: api_app.py
       FLASK_DEBUG: 1

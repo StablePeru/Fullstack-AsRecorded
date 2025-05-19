@@ -8,6 +8,7 @@ import db_handler
 import logging 
 import pandas as pd
 import math 
+import io
 
 # --- Configuración del Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -426,6 +427,94 @@ class DataHandler:
             logging.exception(message)
             return False, message
 
+    def export_single_chapter_to_excel_bytes(self, capitulo_id_to_export: int):
+        """
+        Exporta los datos de un capítulo específico a un stream de bytes de Excel.
+        Devuelve (BytesIO | None, error_message | None, filename_suggestion | None)
+        """
+        if not isinstance(capitulo_id_to_export, int) or capitulo_id_to_export <= 0:
+            return None, "ID de capítulo inválido.", None
+
+        try:
+            # get_single_chapter_data_for_export devuelve una estructura:
+            # { serie_id: { serie_info, capitulos_data: {cap_id: {...}} } } o None
+            raw_data_map = db_handler.get_single_chapter_data_for_export(capitulo_id_to_export)
+        except Exception as e:
+            logging.error(f"Error al obtener datos para exportar capítulo ID {capitulo_id_to_export} desde DB: {e}")
+            return None, f"Error al obtener datos del capítulo: {e}", None
+
+        if not raw_data_map:
+            logging.warning(f"No se encontraron datos para el capítulo ID {capitulo_id_to_export}.")
+            return None, "No se encontraron datos para el capítulo especificado o el capítulo no existe.", None
+
+        # Como es un solo capítulo, la estructura es más simple de navegar.
+        # `raw_data_map` tendrá una sola clave de serie_id si el capítulo existe.
+        serie_id_key = list(raw_data_map.keys())[0]
+        serie_data_content = raw_data_map[serie_id_key]
+
+        # Y `capitulos_data` tendrá una sola clave de capitulo_id (la que buscamos)
+        capitulo_id_key = list(serie_data_content["capitulos_data"].keys())[0]
+        capitulo_content = serie_data_content["capitulos_data"][capitulo_id_key]
+
+        serie_info_dict = serie_data_content.get("serie_info", {})
+        capitulo_info_dict = capitulo_content.get("capitulo_info", {})
+
+        # Hoja 'Serie'
+        df_serie_data = {
+            'Referencia': [serie_info_dict.get('numero_referencia')],
+            'Nombre Serie': [serie_info_dict.get('nombre_serie')],
+            'Nº CAPÍTULO': [capitulo_info_dict.get('numero_capitulo')],
+            'Título Capítulo': [capitulo_info_dict.get('titulo_capitulo')]
+        }
+        df_serie = pd.DataFrame(df_serie_data)
+
+        # Hoja 'Takes'
+        takes_list_for_df = []
+        all_intervenciones_for_capitulo = []
+
+        for _take_id, take_content in capitulo_content.get("takes_data", {}).items():
+            take_info_dict = take_content.get("take_info", {})
+            takes_list_for_df.append({
+                'Numero Take': take_info_dict.get('numero_take'),
+                'TAKE IN': take_info_dict.get('tc_in'),
+                'TAKE OUT': take_info_dict.get('tc_out'),
+            })
+            intervenciones_del_take = take_content.get("intervenciones_data", [])
+            all_intervenciones_for_capitulo.extend(intervenciones_del_take)
+        
+        df_takes = pd.DataFrame(takes_list_for_df)
+        if df_takes.empty: # Asegurar que la hoja exista aunque no haya takes
+            df_takes = pd.DataFrame(columns=['Numero Take', 'TAKE IN', 'TAKE OUT'])
+
+
+        # Hoja 'Intervenciones'
+        df_intervenciones = pd.DataFrame(all_intervenciones_for_capitulo)
+        cols_interv = ['ID', 'Numero Take', 'Personaje', 'Dialogo', 'TC IN', 'TC OUT', 'Completo', 'Completado Por', 'Completado En']
+        if df_intervenciones.empty: # Asegurar que la hoja exista aunque no haya intervenciones
+            df_intervenciones = pd.DataFrame(columns=cols_interv)
+        else:
+            df_intervenciones = df_intervenciones.reindex(columns=cols_interv) # Asegurar el orden y existencia de columnas
+
+        # Generar nombre de archivo
+        serie_ref_str = str(serie_info_dict.get('numero_referencia', 'SerieDesconocida'))
+        cap_num_str = str(capitulo_info_dict.get('numero_capitulo', 'CapDesconocido')).zfill(3)
+        
+        # Usar secure_filename para limpiar la referencia de la serie para el nombre del archivo
+        safe_serie_ref = secure_filename(serie_ref_str)
+        excel_filename = f"{safe_serie_ref}_CAP{cap_num_str}.xlsx"
+
+        # Crear el archivo Excel en memoria
+        excel_bytes_io = io.BytesIO()
+        with pd.ExcelWriter(excel_bytes_io, engine='openpyxl') as writer:
+            df_serie.to_excel(writer, sheet_name='Serie', index=False)
+            df_takes.to_excel(writer, sheet_name='Takes', index=False)
+            df_intervenciones.to_excel(writer, sheet_name='Intervenciones', index=False)
+        
+        excel_bytes_io.seek(0) # Rebobinar el stream al principio
+        
+        logging.info(f"Bytes de Excel generados para capítulo ID {capitulo_id_to_export} (nombre sugerido: {excel_filename})")
+        return excel_bytes_io, None, excel_filename
+
     def export_series_to_excel(self, series_ids_to_export: list[int], output_directory: str):
         """
         Exporta los datos de las series especificadas a archivos Excel,
@@ -520,15 +609,34 @@ class DataHandler:
     # --- Configuraciones (Placeholder) ---
     # Esto debería interactuar con la BD para persistir configuraciones
     def get_io_configurations(self):
-        # Placeholder: En una app real, leería de DB
-        logging.info("Obteniendo configuraciones de I/O (placeholder).")
-        return {
-            "import_path": "/srv/imports", # Ejemplo de ruta en servidor
-            "import_schedule": "daily@02:00",
-            "export_path": "/srv/exports", # Ejemplo de ruta en servidor
-            "export_schedule": "weekly@sunday@03:00",
-            "export_series_ids": "all" # o [1, 2, 3]
+        logging.info("Obteniendo configuraciones de I/O (desde BD con defaults).")
+        # --- VALORES POR DEFECTO ACTUALIZADOS ---
+        # Estas rutas deben coincidir con las rutas INTERNAS DEL CONTENEDOR
+        # que mapeaste en docker-compose.yml.
+        defaults = {
+            "import_path": "/app/io_external/imports", # Actualizado
+            "import_schedule": "manual",
+            "export_path": "/app/io_external/exports", # Actualizado
+            "export_schedule": "manual",
+            "export_series_ids": "all"
         }
+        # --- FIN VALORES POR DEFECTO ACTUALIZADOS ---
+        try:
+            db_config = db_handler.get_io_configuration_from_db()
+            # Fusionar defaults con la configuración de la BD,
+            # la configuración de la BD tiene prioridad.
+            # Aseguramos que todas las claves esperadas existan.
+            final_config = {**defaults, **db_config}
+            # Solo loguear la configuración final si es diferente a los defaults o si hay algo de la BD
+            if db_config: # Si db_config no está vacío, significa que se leyó algo de la BD
+                 logging.info(f"Configuración I/O leída de BD y fusionada: {final_config}")
+            else:
+                 logging.info(f"Configuración I/O usando defaults: {final_config}")
+            return final_config
+        except Exception as e:
+            logging.error(f"Error al obtener o fusionar configuración de I/O: {e}. Usando solo defaults.")
+            logging.info(f"Configuración I/O usando defaults (debido a error): {defaults}")
+            return defaults
 
     def save_io_configurations(self, config_data):
         # Placeholder: En una app real, guardaría en DB y (re)programaría tareas
