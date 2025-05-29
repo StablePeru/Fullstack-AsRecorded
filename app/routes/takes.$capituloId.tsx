@@ -149,6 +149,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 export default function TakesPage() {
   const { capitulo, takes, error: loaderError } = useLoaderData<LoaderData>();
   const params = useParams();
+  const capituloId = params.capituloId; // Explicitly get capituloId
   const fetcher = useFetcher<ActionData>(); // Fetcher para enviar actualizaciones
 
   // Estado para el índice del take actual
@@ -222,6 +223,25 @@ export default function TakesPage() {
           </label>
 
           <button onClick={goToNextTake} disabled={currentTakeIndex === takes.length - 1}>Siguiente Take</button>
+          
+          {/* Export Button */}
+          {capituloId && (
+            <a
+              href={`/api/export/takes/${capituloId}`}
+              download
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: '#28a745', // Green color for export
+                color: 'white',
+                textDecoration: 'none',
+                borderRadius: '4px',
+                display: 'inline-block',
+                textAlign: 'center'
+              }}
+            >
+              Export to .xlsx
+            </a>
+          )}
         </div>
       </div>
 
