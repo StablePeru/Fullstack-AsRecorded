@@ -12,20 +12,25 @@ services:
       - "5432:5432"
     networks:
       - asrecorded_network
+    # OPCIONAL: Healthcheck para asegurar que la BD esté lista antes de que otros servicios dependan de ella.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-AsRecorded_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   api:
     build: .
     container_name: asrecorded_api
     depends_on:
-      - db
+      db:
+        condition: service_healthy # Espera a que el healthcheck de la BD pase
     ports:
       - "5000:5000"
     volumes:
       - .:/app
-      # --- NUEVOS VOLÚMENES PARA IMPORTACIÓN/EXPORTACIÓN ---
-      - W:\zMant\IO_ASRECORDED\IN:/app/io_external/imports   # Host : Contenedor
-      - W:\zMant\IO_ASRECORDED\OUT:/app/io_external/exports  # Host : Contenedor
-      # --- FIN NUEVOS VOLÚMENES ---
+      - W:\zMant\IO_ASRECORDED\IN:/app/io_external/imports
+      - W:\zMant\IO_ASRECORDED\OUT:/app/io_external/exports
     environment:
       FLASK_APP: api_app.py
       FLASK_DEBUG: 1
@@ -37,40 +42,41 @@ services:
     networks:
       - asrecorded_network
 
-  # --- SECCIÓN FRONTEND (AHORA CONFIGURADA) ---
   frontend:
     build:
-      context: ./frontend # Ruta a la carpeta donde está el Dockerfile de Remix
-      dockerfile: Dockerfile # Nombre del Dockerfile (puede omitirse si se llama 'Dockerfile')
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: asrecorded_frontend
+    # El comando `npm run dev -- --host` es correcto. El doble guion (--) pasa el flag `--host`
+    # directamente al script subyacente (Vite/Remix), haciendo que sea accesible desde fuera del contenedor.
     command: sh -c "npm run dev -- --host"
     ports:
-      # Mapea los puertos necesarios:
-      - "3000:3000"  # Puerto principal de la App Remix Dev Server
-      - "5173:5173"  # Puerto de Vite para HMR (Hot Module Replacement)
-      - "8002:8002"  # Puerto de Remix para LiveReload (opcional pero útil)
+      # Puerto principal de la aplicación Remix/Vite.
+      - "3000:3000"
+      # Puerto que usa Vite para Hot Module Replacement (HMR). Esencial para desarrollo.
+      - "5173:5173"
+      # El puerto 8002 era para el antiguo sistema LiveReload de Remix, usualmente no es necesario con Vite. [4]
+      # - "8002:8002"
     volumes:
-       # Monta el código local para desarrollo en caliente
-       # Los cambios en tu código Remix se reflejarán
+      # Monta el código fuente local para reflejar cambios al instante.
       - ./frontend:/app
-      # Evita que node_modules local sobreescriba el del contenedor (importante en Windows/macOS)
+      # Truco esencial: Evita que la carpeta node_modules local sobreescriba la del contenedor. [1]
       - /app/node_modules
-# frontend service...
     environment:
-      # Aseguramos/Añadimos las variables necesarias para el entorno dev:
       NODE_ENV: development
-      CHOKIDAR_USEPOLLING: "true"   # Para hot-reload fiable en Docker
-      HOST: 0.0.0.0               # Para asegurar que escucha correctamente
-      REMIX_DEV_ORIGIN: http://localhost:3000 # Ayuda a HMR/WebSockets
-      # Mantenemos las variables que ya tenías:
-      API_BASE_URL: http://api:5000/api # CORRECTO: Para conectar con tu backend
-      SESSION_SECRET: "tu-secreto-largo-y-aleatorio-aqui" # ¡Recuerda cambiar esto por uno real!
-
+      # Habilita el "polling" para que la detección de cambios de archivos funcione correctamente dentro de Docker. [2]
+      CHOKIDAR_USEPOLLING: "true"
+      # La variable `HOST` es redundante si ya usas el flag `--host` en el comando.
+      # HOST: 0.0.0.0
+      # Variable para que el cliente (navegador) sepa cómo conectarse al servidor de HMR.
+      REMIX_DEV_ORIGIN: http://localhost:3000
+      # Conexión del frontend al backend a través de la red interna de Docker.
+      API_BASE_URL: http://api:5000/api
+      SESSION_SECRET: "tu-secreto-largo-y-aleatorio-aqui"
     depends_on:
-     - api # Inicia el frontend después de que la API esté lista (aunque no garantiza que esté *respondiendo*)
+     - api
     networks:
       - asrecorded_network
-  # --- FIN SECCIÓN FRONTEND ---
 
 volumes:
   postgres_data:
